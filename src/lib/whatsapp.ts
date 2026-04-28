@@ -1,12 +1,21 @@
-import { getSettings } from "@/lib/store";
-import type { Order } from "@/lib/store";
-
-export function whatsappLink(text: string, numberOverride?: string) {
-  const num = numberOverride ?? getSettings().whatsappNumber;
-  return `https://wa.me/${num}?text=${encodeURIComponent(text)}`;
+export function whatsappLink(text: string, number: string) {
+  return `https://wa.me/${number}?text=${encodeURIComponent(text)}`;
 }
 
-export function orderToWhatsappText(order: Order): string {
+export interface WhatsAppOrderInput {
+  id: string;
+  customer: { name: string; phone: string; address: string };
+  delivery: "delivery" | "pickup";
+  payment: "cod" | "bank";
+  items: { name: string; weight: string; qty: number; unitPrice: number }[];
+  subtotal: number;
+  shipping: number;
+  discount: number;
+  couponCode?: string | null;
+  total: number;
+}
+
+export function orderToWhatsappText(order: WhatsAppOrderInput): string {
   const lines: string[] = [];
   lines.push(`*New Order — Masto Roastery*`);
   lines.push(`Order ID: ${order.id}`);
@@ -18,7 +27,7 @@ export function orderToWhatsappText(order: Order): string {
   lines.push("");
   lines.push(`*Items*`);
   for (const it of order.items) {
-    lines.push(`• ${it.name} (${it.variant}) × ${it.qty} — Rs. ${(it.unitPrice * it.qty).toLocaleString("en-IN")}`);
+    lines.push(`• ${it.name} (${it.weight}) × ${it.qty} — Rs. ${(it.unitPrice * it.qty).toLocaleString("en-IN")}`);
   }
   lines.push("");
   lines.push(`Subtotal: Rs. ${order.subtotal.toLocaleString("en-IN")}`);
