@@ -1,6 +1,5 @@
 import { Link } from "react-router-dom";
-import type { Product } from "@/data/products";
-import { formatNPR, startingPrice } from "@/lib/store";
+import { formatNPR, startingPrice, type Product } from "@/lib/api";
 import ProductImage from "./ProductImage";
 
 export default function ProductCard({ product }: { product: Product }) {
@@ -9,7 +8,7 @@ export default function ProductCard({ product }: { product: Product }) {
       to={`/product/${product.slug}`}
       className="group block overflow-hidden rounded-lg border border-border/60 bg-card transition-all hover:shadow-card"
     >
-      <ProductImage className="aspect-square" label={product.process} />
+      <ProductImage className="aspect-square" label={product.process ?? undefined} src={product.image_url} alt={product.name} />
       <div className="p-5">
         <div className="flex items-start justify-between gap-3">
           <h3 className="font-serif text-lg leading-tight text-espresso group-hover:text-accent">
@@ -20,11 +19,11 @@ export default function ProductCard({ product }: { product: Product }) {
             <div className="font-medium">{formatNPR(startingPrice(product))}</div>
           </div>
         </div>
-        <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">{product.shortNote}</p>
+        {product.short_note && <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">{product.short_note}</p>}
         <div className="mt-4 flex items-center gap-2 text-[11px] uppercase tracking-wider text-muted-foreground">
-          <span>{product.roast}</span>
-          <span>•</span>
-          <span>{product.origin}</span>
+          {product.roast && <span>{product.roast}</span>}
+          {product.roast && product.origin && <span>•</span>}
+          {product.origin && <span>{product.origin}</span>}
         </div>
       </div>
     </Link>
