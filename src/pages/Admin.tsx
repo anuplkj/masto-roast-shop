@@ -1,64 +1,48 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
-import { LogOut } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { LogOut, Plus, Trash2, Upload } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  ADMIN_PASSWORD, isAdminAuthed, setAdminAuthed,
-  getOrders, updateOrderStatus, type OrderStatus,
-  getProducts, saveProducts,
-  getCoupons, saveCoupons, type Coupon,
-  getSettings, saveSettings, type Settings,
-  formatNPR,
-} from "@/lib/store";
-import type { Product, Variant } from "@/data/products";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+import { fetchProducts, fetchSettings, fetchGallery, formatNPR, WEIGHTS, type Product, type Settings, type Weight } from "@/lib/api";
+import { uploadImage, deleteImage } from "@/lib/upload";
 import { toast } from "@/hooks/use-toast";
 
-const VARIANTS: Variant[] = ["250g", "500g", "1kg"];
-
 export default function Admin() {
-  const [authed, setAuthed] = useState(false);
-  const [pw, setPw] = useState("");
+  const { user, isAdmin, loading, signOut } = useAuth();
+  const navigate = useNavigate();
 
-  useEffect(() => { setAuthed(isAdminAuthed()); }, []);
+  useEffect(() => {
+    if (!loading && !user) navigate("/admin/login");
+  }, [loading, user, navigate]);
 
-  const tryLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (pw === ADMIN_PASSWORD) {
-      setAdminAuthed(true);
-      setAuthed(true);
-    } else {
-      toast({ title: "Wrong password", variant: "destructive" });
-    }
-  };
-
-  const logout = () => { setAdminAuthed(false); setAuthed(false); setPw(""); };
-
-  if (!authed) {
+  if (loading) return <div className="flex min-h-screen items-center justify-center bg-cream">Loading…</div>;
+  if (!user) return null;
+  if (!isAdmin) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-cream p-6">
-        <form onSubmit={tryLogin} className="w-full max-w-sm rounded-2xl border border-border bg-card p-8 shadow-soft">
-          <h1 className="font-serif text-2xl text-espresso">Admin</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Enter the admin password to continue.</p>
-          <Label className="mt-6 block">Password</Label>
-          <Input type="password" value={pw} onChange={(e) => setPw(e.target.value)} className="mt-1" />
-          <Button type="submit" className="mt-4 w-full bg-espresso text-cream hover:bg-espresso/90">Sign in</Button>
-          <Link to="/" className="mt-4 block text-center text-xs text-muted-foreground hover:text-foreground">← Back to site</Link>
-        </form>
+        <div className="max-w-md rounded-2xl border border-border bg-card p-8 text-center shadow-soft">
+          <h1 className="font-serif text-2xl text-espresso">Not authorized</h1>
+          <p className="mt-2 text-sm text-muted-foreground">Your account doesn't have admin access.</p>
+          <Button onClick={() => signOut().then(() => navigate("/admin/login"))} className="mt-6">Sign out</Button>
+        </div>
       </div>
     );
   }
+
+  const logout = async () => { await signOut(); navigate("/admin/login"); };
 
   return (
     <div className="min-h-screen bg-cream">
       <header className="border-b border-border bg-background">
         <div className="container flex h-16 items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span className="font-serif text-xl text-espresso">Masto Admin</span>
-          </div>
+          <span className="font-serif text-xl text-espresso">Masto Admin</span>
           <div className="flex items-center gap-2">
             <Button asChild variant="ghost" size="sm"><Link to="/">View site</Link></Button>
             <Button onClick={logout} variant="outline" size="sm"><LogOut className="mr-2 h-4 w-4" /> Sign out</Button>
@@ -68,15 +52,20 @@ export default function Admin() {
 
       <main className="container py-10">
         <Tabs defaultValue="orders">
-          <TabsList>
+          <TabsList className="flex-wrap">
             <TabsTrigger value="orders">Orders</TabsTrigger>
+            <TabsTrigger value="inquiries">Wholesale</TabsTrigger>
             <TabsTrigger value="products">Products</TabsTrigger>
+            <TabsTrigger value="gallery">Gallery</TabsTrigger>
+            <TabsTrigger value="branding">Branding</TabsTrigger>
             <TabsTrigger value="coupons">Coupons</TabsTrigger>
             <TabsTrigger value="settings">Settings</TabsTrigger>
           </TabsList>
-
           <TabsContent value="orders" className="mt-6"><OrdersTab /></TabsContent>
+          <TabsContent value="inquiries" className="mt-6"><InquiriesTab /></TabsContent>
           <TabsContent value="products" className="mt-6"><ProductsTab /></TabsContent>
+          <TabsContent value="gallery" className="mt-6"><GalleryTab /></TabsContent>
+          <TabsContent value="branding" className="mt-6"><BrandingTab /></TabsContent>
           <TabsContent value="coupons" className="mt-6"><CouponsTab /></TabsContent>
           <TabsContent value="settings" className="mt-6"><SettingsTab /></TabsContent>
         </Tabs>
@@ -85,61 +74,64 @@ export default function Admin() {
   );
 }
 
+// ============ ORDERS ============
 function OrdersTab() {
-  const [orders, setOrders] = useState(() => getOrders());
-  const refresh = () => setOrders(getOrders());
+  const qc = useQueryClient();
+  const { data: orders = [] } = useQuery({
+    queryKey: ["admin-orders"],
+    queryFn: async () => {
+      const { data } = await supabase.from("orders").select("*, items:order_items(*)").order("created_at", { ascending: false });
+      return data ?? [];
+    },
+  });
 
-  const setStatus = (id: string, s: OrderStatus) => {
-    updateOrderStatus(id, s); refresh();
+  const setStatus = async (id: string, status: string) => {
+    await supabase.from("orders").update({ status }).eq("id", id);
+    qc.invalidateQueries({ queryKey: ["admin-orders"] });
   };
 
-  if (orders.length === 0) {
-    return <p className="text-muted-foreground">No orders yet. Orders placed in this browser will show here.</p>;
-  }
+  if (orders.length === 0) return <p className="text-muted-foreground">No orders yet.</p>;
 
   return (
     <div className="space-y-3">
-      {orders.map((o) => (
+      {orders.map((o: any) => (
         <details key={o.id} className="rounded-lg border border-border bg-background p-4">
           <summary className="flex cursor-pointer items-center justify-between gap-4">
             <div>
-              <div className="font-mono text-sm">{o.id}</div>
-              <div className="text-xs text-muted-foreground">
-                {new Date(o.createdAt).toLocaleString()} · {o.customer.name}
-              </div>
+              <div className="font-mono text-sm">{o.id.slice(0, 8).toUpperCase()}</div>
+              <div className="text-xs text-muted-foreground">{new Date(o.created_at).toLocaleString()} · {o.customer_name}</div>
             </div>
             <div className="flex items-center gap-3">
               <span className="font-medium">{formatNPR(o.total)}</span>
-              <StatusBadge status={o.status} />
+              <span className="rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium">{o.status}</span>
             </div>
           </summary>
           <div className="mt-4 grid gap-4 border-t border-border pt-4 md:grid-cols-2">
             <div>
               <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Customer</div>
-              <div className="mt-1 text-sm">{o.customer.name}</div>
-              <div className="text-sm">{o.customer.phone}</div>
-              <div className="text-sm text-muted-foreground">{o.customer.address}</div>
+              <div className="mt-1 text-sm">{o.customer_name}</div>
+              <div className="text-sm">{o.customer_phone}</div>
+              <div className="text-sm text-muted-foreground">{o.customer_address}</div>
               <div className="mt-3 text-xs text-muted-foreground">
                 {o.delivery === "pickup" ? "Local pickup" : "Home delivery"} · {o.payment === "cod" ? "COD" : "Bank transfer"}
               </div>
+              {o.notes && <div className="mt-2 text-xs italic text-muted-foreground">"{o.notes}"</div>}
             </div>
             <div>
               <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Items</div>
               <ul className="mt-1 space-y-1 text-sm">
-                {o.items.map((it) => (
-                  <li key={`${it.slug}-${it.variant}`} className="flex justify-between gap-2">
-                    <span>{it.name} ({it.variant}) × {it.qty}</span>
-                    <span>{formatNPR(it.unitPrice * it.qty)}</span>
+                {(o.items ?? []).map((it: any) => (
+                  <li key={it.id} className="flex justify-between gap-2">
+                    <span>{it.product_name} ({it.weight}) × {it.qty}</span>
+                    <span>{formatNPR(it.unit_price * it.qty)}</span>
                   </li>
                 ))}
               </ul>
             </div>
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
-            {(["new", "confirmed", "fulfilled", "cancelled"] as OrderStatus[]).map((s) => (
-              <Button key={s} size="sm" variant={o.status === s ? "default" : "outline"} onClick={() => setStatus(o.id, s)}>
-                {s}
-              </Button>
+            {["new", "confirmed", "fulfilled", "cancelled"].map((s) => (
+              <Button key={s} size="sm" variant={o.status === s ? "default" : "outline"} onClick={() => setStatus(o.id, s)}>{s}</Button>
             ))}
           </div>
         </details>
@@ -148,92 +140,346 @@ function OrdersTab() {
   );
 }
 
-function StatusBadge({ status }: { status: OrderStatus }) {
-  const map: Record<OrderStatus, string> = {
-    new: "bg-accent/15 text-accent",
-    confirmed: "bg-secondary text-secondary-foreground",
-    fulfilled: "bg-espresso text-cream",
-    cancelled: "bg-destructive/15 text-destructive",
-  };
-  return <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${map[status]}`}>{status}</span>;
-}
+// ============ INQUIRIES ============
+function InquiriesTab() {
+  const qc = useQueryClient();
+  const { data: inquiries = [] } = useQuery({
+    queryKey: ["admin-inquiries"],
+    queryFn: async () => {
+      const { data } = await supabase.from("wholesale_inquiries").select("*").order("created_at", { ascending: false });
+      return data ?? [];
+    },
+  });
 
-function ProductsTab() {
-  const [products, setProducts] = useState<Product[]>(() => getProducts());
-
-  const update = (slug: string, patch: Partial<Product>) => {
-    const next = products.map((p) => (p.slug === slug ? { ...p, ...patch } : p));
-    setProducts(next); saveProducts(next);
+  const setStatus = async (id: string, status: string) => {
+    await supabase.from("wholesale_inquiries").update({ status }).eq("id", id);
+    qc.invalidateQueries({ queryKey: ["admin-inquiries"] });
   };
+
+  if (inquiries.length === 0) return <p className="text-muted-foreground">No wholesale inquiries yet.</p>;
 
   return (
     <div className="space-y-3">
-      {products.map((p) => (
-        <details key={p.slug} className="rounded-lg border border-border bg-background p-4">
-          <summary className="flex cursor-pointer items-center justify-between gap-4">
+      {inquiries.map((i: any) => (
+        <div key={i.id} className="rounded-lg border border-border bg-background p-4">
+          <div className="flex items-start justify-between gap-3">
             <div>
-              <div className="font-serif text-lg">{p.name}</div>
-              <div className="text-xs text-muted-foreground">{p.roast} · {p.process}</div>
+              <div className="font-serif text-lg">{i.business}</div>
+              <div className="text-sm text-muted-foreground">{i.name} · {i.phone}</div>
+              <div className="mt-2 text-sm"><span className="text-muted-foreground">Monthly:</span> {i.monthly_demand}</div>
+              {i.notes && <div className="mt-2 text-xs italic text-muted-foreground">"{i.notes}"</div>}
+              <div className="mt-2 text-xs text-muted-foreground">{new Date(i.created_at).toLocaleString()}</div>
             </div>
-            <div className="flex items-center gap-3">
-              <span className="text-xs text-muted-foreground">Stock: {Object.values(p.stock).reduce((a, b) => a + b, 0)}</span>
-              <span className={`text-xs ${p.active ? "text-accent" : "text-muted-foreground"}`}>{p.active ? "Active" : "Hidden"}</span>
-            </div>
-          </summary>
-          <div className="mt-4 grid gap-4 border-t border-border pt-4 md:grid-cols-2">
-            <div>
-              <Label>Name</Label>
-              <Input value={p.name} onChange={(e) => update(p.slug, { name: e.target.value })} className="mt-1" />
-            </div>
-            <div>
-              <Label>Short note</Label>
-              <Input value={p.shortNote} onChange={(e) => update(p.slug, { shortNote: e.target.value })} className="mt-1" />
-            </div>
-            <div className="md:col-span-2">
-              <Label>Description</Label>
-              <Textarea value={p.description} rows={2} onChange={(e) => update(p.slug, { description: e.target.value })} className="mt-1" />
-            </div>
-            {VARIANTS.map((v) => (
-              <div key={v} className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label>{v} price</Label>
-                  <Input type="number" value={p.prices[v]} onChange={(e) => update(p.slug, { prices: { ...p.prices, [v]: Number(e.target.value) || 0 } })} className="mt-1" />
-                </div>
-                <div>
-                  <Label>{v} stock</Label>
-                  <Input type="number" value={p.stock[v]} onChange={(e) => update(p.slug, { stock: { ...p.stock, [v]: Number(e.target.value) || 0 } })} className="mt-1" />
-                </div>
-              </div>
-            ))}
-            <div className="flex items-center gap-4 md:col-span-2">
-              <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={p.active} onChange={(e) => update(p.slug, { active: e.target.checked })} className="accent-espresso" />
-                Active (visible on site)
-              </label>
-              <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={p.featured} onChange={(e) => update(p.slug, { featured: e.target.checked })} className="accent-espresso" />
-                Featured on homepage
-              </label>
+            <div className="flex flex-col gap-2">
+              {["new", "contacted", "closed"].map((s) => (
+                <Button key={s} size="sm" variant={i.status === s ? "default" : "outline"} onClick={() => setStatus(i.id, s)}>{s}</Button>
+              ))}
             </div>
           </div>
-        </details>
+        </div>
       ))}
     </div>
   );
 }
 
-function CouponsTab() {
-  const [coupons, setCoupons] = useState<Coupon[]>(() => getCoupons());
-  const [draft, setDraft] = useState<Coupon>({ code: "", type: "percent", value: 10, active: true });
+// ============ PRODUCTS ============
+function ProductsTab() {
+  const qc = useQueryClient();
+  const { data: products = [] } = useQuery({ queryKey: ["admin-products"], queryFn: fetchProducts });
+  const [creating, setCreating] = useState(false);
 
-  const persist = (next: Coupon[]) => { setCoupons(next); saveCoupons(next); };
-  const add = () => {
-    if (!draft.code.trim()) return;
-    persist([...coupons.filter((c) => c.code.toLowerCase() !== draft.code.toLowerCase()), { ...draft, code: draft.code.trim().toUpperCase() }]);
-    setDraft({ code: "", type: "percent", value: 10, active: true });
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-end">
+        <Button onClick={() => setCreating(true)} className="bg-espresso text-cream hover:bg-espresso/90">
+          <Plus className="mr-2 h-4 w-4" /> Add product
+        </Button>
+      </div>
+      {creating && <NewProductForm onDone={() => { setCreating(false); qc.invalidateQueries({ queryKey: ["admin-products"] }); qc.invalidateQueries({ queryKey: ["products"] }); }} />}
+      <div className="space-y-3">
+        {products.map((p) => (
+          <ProductRow key={p.id} product={p} onChange={() => { qc.invalidateQueries({ queryKey: ["admin-products"] }); qc.invalidateQueries({ queryKey: ["products"] }); }} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function NewProductForm({ onDone }: { onDone: () => void }) {
+  const [name, setName] = useState("");
+  const [slug, setSlug] = useState("");
+  const [shortNote, setShortNote] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    if (!name || !slug) { toast({ title: "Name and slug required" }); return; }
+    setSaving(true);
+    try {
+      const { data: prod, error } = await supabase.from("products").insert({
+        name, slug: slug.toLowerCase().replace(/[^a-z0-9-]/g, "-"),
+        short_note: shortNote || null, active: true, featured: false,
+      }).select("id").single();
+      if (error) throw error;
+      await supabase.from("product_variants").insert(WEIGHTS.map((w, idx) => ({
+        product_id: prod.id, weight: w, price_npr: 500 * (idx + 1), stock: 0,
+      })));
+      toast({ title: "Product created" });
+      onDone();
+    } catch (e: any) {
+      toast({ title: "Failed", description: e?.message, variant: "destructive" });
+    } finally { setSaving(false); }
   };
-  const remove = (code: string) => persist(coupons.filter((c) => c.code !== code));
-  const toggle = (code: string) => persist(coupons.map((c) => (c.code === code ? { ...c, active: !c.active } : c)));
+
+  return (
+    <div className="rounded-lg border border-dashed border-border bg-background p-4">
+      <h3 className="font-serif text-lg">New product</h3>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <div><Label>Name</Label><Input value={name} onChange={(e) => { setName(e.target.value); if (!slug) setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, "-")); }} /></div>
+        <div><Label>Slug (URL)</Label><Input value={slug} onChange={(e) => setSlug(e.target.value)} /></div>
+        <div className="sm:col-span-2"><Label>Short note</Label><Input value={shortNote} onChange={(e) => setShortNote(e.target.value)} /></div>
+      </div>
+      <div className="mt-4 flex gap-2">
+        <Button onClick={save} disabled={saving} className="bg-espresso text-cream hover:bg-espresso/90">Create</Button>
+        <Button variant="outline" onClick={onDone}>Cancel</Button>
+      </div>
+    </div>
+  );
+}
+
+function ProductRow({ product, onChange }: { product: Product; onChange: () => void }) {
+  const [p, setP] = useState(product);
+  useEffect(() => setP(product), [product]);
+
+  const update = (patch: Partial<Product>) => setP({ ...p, ...patch });
+
+  const save = async () => {
+    const { error } = await supabase.from("products").update({
+      name: p.name, slug: p.slug, short_note: p.short_note, description: p.description,
+      flavor_notes: p.flavor_notes, brew_recommendations: p.brew_recommendations,
+      roast: p.roast, process: p.process, origin: p.origin,
+      active: p.active, featured: p.featured, image_url: p.image_url,
+    }).eq("id", p.id);
+    if (error) { toast({ title: "Save failed", description: error.message, variant: "destructive" }); return; }
+    for (const v of p.variants) {
+      await supabase.from("product_variants").update({ price_npr: v.price_npr, stock: v.stock }).eq("id", v.id);
+    }
+    toast({ title: "Saved" });
+    onChange();
+  };
+
+  const remove = async () => {
+    if (p.image_url) await deleteImage("product-images", p.image_url).catch(() => {});
+    const { error } = await supabase.from("products").delete().eq("id", p.id);
+    if (error) { toast({ title: "Delete failed", description: error.message, variant: "destructive" }); return; }
+    toast({ title: "Deleted" });
+    onChange();
+  };
+
+  const onUpload = async (file: File) => {
+    try {
+      if (p.image_url) await deleteImage("product-images", p.image_url).catch(() => {});
+      const url = await uploadImage("product-images", file, p.slug);
+      await supabase.from("products").update({ image_url: url }).eq("id", p.id);
+      update({ image_url: url });
+      toast({ title: "Image uploaded" });
+      onChange();
+    } catch (e: any) {
+      toast({ title: "Upload failed", description: e?.message, variant: "destructive" });
+    }
+  };
+
+  return (
+    <details className="rounded-lg border border-border bg-background p-4">
+      <summary className="flex cursor-pointer items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          {p.image_url && <img src={p.image_url} className="h-10 w-10 rounded object-cover" alt="" />}
+          <div>
+            <div className="font-serif text-lg">{p.name}</div>
+            <div className="text-xs text-muted-foreground">{p.roast ?? "—"} · {p.process ?? "—"}</div>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-muted-foreground">Stock: {p.variants.reduce((a, v) => a + v.stock, 0)}</span>
+          <span className={`text-xs ${p.active ? "text-accent" : "text-muted-foreground"}`}>{p.active ? "Active" : "Hidden"}</span>
+        </div>
+      </summary>
+      <div className="mt-4 grid gap-4 border-t border-border pt-4 md:grid-cols-2">
+        <div className="md:col-span-2">
+          <Label>Image</Label>
+          <div className="mt-1 flex items-center gap-3">
+            {p.image_url ? <img src={p.image_url} className="h-20 w-20 rounded object-cover" alt="" /> : <div className="h-20 w-20 rounded bg-secondary" />}
+            <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm hover:bg-secondary">
+              <Upload className="h-4 w-4" /> Upload
+              <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && onUpload(e.target.files[0])} />
+            </label>
+            {p.image_url && <Button size="sm" variant="ghost" onClick={async () => { await deleteImage("product-images", p.image_url!).catch(() => {}); await supabase.from("products").update({ image_url: null }).eq("id", p.id); update({ image_url: null }); onChange(); }}>Remove</Button>}
+          </div>
+        </div>
+        <div><Label>Name</Label><Input value={p.name} onChange={(e) => update({ name: e.target.value })} className="mt-1" /></div>
+        <div><Label>Slug</Label><Input value={p.slug} onChange={(e) => update({ slug: e.target.value })} className="mt-1" /></div>
+        <div><Label>Roast</Label><Input value={p.roast ?? ""} onChange={(e) => update({ roast: e.target.value })} className="mt-1" /></div>
+        <div><Label>Process</Label><Input value={p.process ?? ""} onChange={(e) => update({ process: e.target.value })} className="mt-1" /></div>
+        <div><Label>Origin</Label><Input value={p.origin ?? ""} onChange={(e) => update({ origin: e.target.value })} className="mt-1" /></div>
+        <div><Label>Short note</Label><Input value={p.short_note ?? ""} onChange={(e) => update({ short_note: e.target.value })} className="mt-1" /></div>
+        <div className="md:col-span-2"><Label>Description</Label><Textarea rows={3} value={p.description ?? ""} onChange={(e) => update({ description: e.target.value })} className="mt-1" /></div>
+        <div className="md:col-span-2"><Label>Flavor notes (comma separated)</Label><Input value={p.flavor_notes.join(", ")} onChange={(e) => update({ flavor_notes: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) })} className="mt-1" /></div>
+        <div className="md:col-span-2"><Label>Brew recommendations (comma separated)</Label><Input value={p.brew_recommendations.join(", ")} onChange={(e) => update({ brew_recommendations: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) })} className="mt-1" /></div>
+        {WEIGHTS.map((w) => {
+          const v = p.variants.find((x) => x.weight === w);
+          if (!v) return null;
+          return (
+            <div key={w} className="grid grid-cols-2 gap-3">
+              <div><Label>{w} price (Rs.)</Label><Input type="number" value={v.price_npr} onChange={(e) => update({ variants: p.variants.map((x) => x.weight === w ? { ...x, price_npr: Number(e.target.value) || 0 } : x) })} className="mt-1" /></div>
+              <div><Label>{w} stock</Label><Input type="number" value={v.stock} onChange={(e) => update({ variants: p.variants.map((x) => x.weight === w ? { ...x, stock: Number(e.target.value) || 0 } : x) })} className="mt-1" /></div>
+            </div>
+          );
+        })}
+        <div className="flex items-center gap-4 md:col-span-2">
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={p.active} onChange={(e) => update({ active: e.target.checked })} className="accent-espresso" /> Active</label>
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={p.featured} onChange={(e) => update({ featured: e.target.checked })} className="accent-espresso" /> Featured</label>
+        </div>
+        <div className="flex justify-between gap-2 md:col-span-2">
+          <Button onClick={save} className="bg-espresso text-cream hover:bg-espresso/90">Save changes</Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="outline" className="text-destructive"><Trash2 className="mr-2 h-4 w-4" /> Delete</Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader><AlertDialogTitle>Delete {p.name}?</AlertDialogTitle><AlertDialogDescription>This permanently removes the product and its variants.</AlertDialogDescription></AlertDialogHeader>
+              <AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={remove}>Delete</AlertDialogAction></AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
+      </div>
+    </details>
+  );
+}
+
+// ============ GALLERY ============
+function GalleryTab() {
+  const qc = useQueryClient();
+  const { data: images = [] } = useQuery({ queryKey: ["admin-gallery"], queryFn: fetchGallery });
+  const [uploading, setUploading] = useState(false);
+
+  const onUpload = async (files: FileList) => {
+    setUploading(true);
+    try {
+      for (const f of Array.from(files)) {
+        const url = await uploadImage("gallery", f);
+        await supabase.from("gallery_images").insert({ image_url: url });
+      }
+      toast({ title: "Uploaded" });
+      qc.invalidateQueries({ queryKey: ["admin-gallery"] });
+      qc.invalidateQueries({ queryKey: ["gallery"] });
+    } catch (e: any) {
+      toast({ title: "Upload failed", description: e?.message, variant: "destructive" });
+    } finally { setUploading(false); }
+  };
+
+  const remove = async (id: string, url: string) => {
+    await deleteImage("gallery", url).catch(() => {});
+    await supabase.from("gallery_images").delete().eq("id", id);
+    qc.invalidateQueries({ queryKey: ["admin-gallery"] });
+    qc.invalidateQueries({ queryKey: ["gallery"] });
+  };
+
+  return (
+    <div>
+      <label className="inline-flex cursor-pointer items-center gap-2 rounded-md bg-espresso px-4 py-2 text-sm text-cream hover:bg-espresso/90">
+        <Upload className="h-4 w-4" /> {uploading ? "Uploading…" : "Upload photos"}
+        <input type="file" multiple accept="image/*" className="hidden" disabled={uploading} onChange={(e) => e.target.files && onUpload(e.target.files)} />
+      </label>
+      <div className="mt-6 grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+        {images.map((img) => (
+          <div key={img.id} className="group relative overflow-hidden rounded-lg border border-border bg-background">
+            <img src={img.image_url} alt="" className="aspect-[4/3] w-full object-cover" loading="lazy" />
+            <button onClick={() => remove(img.id, img.image_url)} className="absolute right-2 top-2 rounded-full bg-background/90 p-1.5 text-destructive opacity-0 transition-opacity group-hover:opacity-100">
+              <Trash2 className="h-4 w-4" />
+            </button>
+          </div>
+        ))}
+        {images.length === 0 && <p className="col-span-full text-sm text-muted-foreground">No photos yet.</p>}
+      </div>
+    </div>
+  );
+}
+
+// ============ BRANDING ============
+function BrandingTab() {
+  const qc = useQueryClient();
+  const { data: settings } = useQuery({ queryKey: ["admin-settings"], queryFn: fetchSettings });
+  const [name, setName] = useState("");
+  useEffect(() => { if (settings) setName(settings.brand_name); }, [settings]);
+
+  if (!settings) return null;
+
+  const onUpload = async (file: File) => {
+    try {
+      if (settings.logo_url) await deleteImage("branding", settings.logo_url).catch(() => {});
+      const url = await uploadImage("branding", file, "logo");
+      await supabase.from("settings").update({ logo_url: url }).eq("id", 1);
+      qc.invalidateQueries({ queryKey: ["admin-settings"] });
+      qc.invalidateQueries({ queryKey: ["settings"] });
+      toast({ title: "Logo updated" });
+    } catch (e: any) { toast({ title: "Upload failed", description: e?.message, variant: "destructive" }); }
+  };
+
+  const removeLogo = async () => {
+    if (settings.logo_url) await deleteImage("branding", settings.logo_url).catch(() => {});
+    await supabase.from("settings").update({ logo_url: null }).eq("id", 1);
+    qc.invalidateQueries({ queryKey: ["admin-settings"] });
+    qc.invalidateQueries({ queryKey: ["settings"] });
+  };
+
+  const saveName = async () => {
+    await supabase.from("settings").update({ brand_name: name }).eq("id", 1);
+    qc.invalidateQueries({ queryKey: ["admin-settings"] });
+    qc.invalidateQueries({ queryKey: ["settings"] });
+    toast({ title: "Brand name saved" });
+  };
+
+  return (
+    <div className="grid max-w-2xl gap-6 rounded-lg border border-border bg-background p-6">
+      <div>
+        <Label>Brand name</Label>
+        <div className="mt-1 flex gap-2"><Input value={name} onChange={(e) => setName(e.target.value)} /><Button onClick={saveName}>Save</Button></div>
+      </div>
+      <div>
+        <Label>Logo</Label>
+        <div className="mt-2 flex items-center gap-4">
+          <div className="flex h-20 w-40 items-center justify-center rounded-md border border-border bg-cream">
+            {settings.logo_url ? <img src={settings.logo_url} alt="" className="max-h-full max-w-full object-contain" /> : <span className="text-xs text-muted-foreground">No logo</span>}
+          </div>
+          <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm hover:bg-secondary">
+            <Upload className="h-4 w-4" /> Upload
+            <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && onUpload(e.target.files[0])} />
+          </label>
+          {settings.logo_url && <Button variant="outline" onClick={removeLogo}>Remove</Button>}
+        </div>
+        <p className="mt-2 text-xs text-muted-foreground">PNG with transparent background works best. Max 2MB.</p>
+      </div>
+    </div>
+  );
+}
+
+// ============ COUPONS ============
+function CouponsTab() {
+  const qc = useQueryClient();
+  const { data: coupons = [] } = useQuery({
+    queryKey: ["admin-coupons"],
+    queryFn: async () => (await supabase.from("coupons").select("*").order("code")).data ?? [],
+  });
+  const [draft, setDraft] = useState({ code: "", type: "percent" as "percent" | "flat", value: 10, active: true });
+
+  const refresh = () => qc.invalidateQueries({ queryKey: ["admin-coupons"] });
+  const add = async () => {
+    if (!draft.code.trim()) return;
+    await supabase.from("coupons").upsert({ ...draft, code: draft.code.trim().toUpperCase() });
+    setDraft({ code: "", type: "percent", value: 10, active: true });
+    refresh();
+  };
+  const remove = async (code: string) => { await supabase.from("coupons").delete().eq("code", code); refresh(); };
+  const toggle = async (c: any) => { await supabase.from("coupons").update({ active: !c.active }).eq("code", c.code); refresh(); };
 
   return (
     <div>
@@ -241,7 +487,7 @@ function CouponsTab() {
         <h3 className="font-serif text-lg">New coupon</h3>
         <div className="mt-3 grid gap-3 sm:grid-cols-4">
           <Input placeholder="CODE" value={draft.code} onChange={(e) => setDraft({ ...draft, code: e.target.value })} />
-          <select value={draft.type} onChange={(e) => setDraft({ ...draft, type: e.target.value as Coupon["type"] })} className="h-10 rounded-md border border-border bg-background px-3 text-sm">
+          <select value={draft.type} onChange={(e) => setDraft({ ...draft, type: e.target.value as any })} className="h-10 rounded-md border border-border bg-background px-3 text-sm">
             <option value="percent">Percent (%)</option>
             <option value="flat">Flat (Rs.)</option>
           </select>
@@ -249,18 +495,15 @@ function CouponsTab() {
           <Button onClick={add} className="bg-espresso text-cream hover:bg-espresso/90">Add</Button>
         </div>
       </div>
-
       <div className="mt-6 space-y-2">
-        {coupons.map((c) => (
+        {coupons.map((c: any) => (
           <div key={c.code} className="flex items-center justify-between rounded-lg border border-border bg-background p-4">
             <div>
               <div className="font-mono font-medium">{c.code}</div>
               <div className="text-xs text-muted-foreground">{c.type === "percent" ? `${c.value}% off` : `Rs. ${c.value} off`}</div>
             </div>
             <div className="flex items-center gap-2">
-              <Button size="sm" variant={c.active ? "default" : "outline"} onClick={() => toggle(c.code)}>
-                {c.active ? "Active" : "Inactive"}
-              </Button>
+              <Button size="sm" variant={c.active ? "default" : "outline"} onClick={() => toggle(c)}>{c.active ? "Active" : "Inactive"}</Button>
               <Button size="sm" variant="outline" onClick={() => remove(c.code)}>Delete</Button>
             </div>
           </div>
@@ -271,42 +514,43 @@ function CouponsTab() {
   );
 }
 
+// ============ SETTINGS ============
 function SettingsTab() {
-  const [s, setS] = useState<Settings>(() => getSettings());
-  const save = () => { saveSettings(s); toast({ title: "Settings saved" }); };
+  const qc = useQueryClient();
+  const { data } = useQuery({ queryKey: ["admin-settings"], queryFn: fetchSettings });
+  const [s, setS] = useState<Settings | null>(null);
+  useEffect(() => { if (data) setS(data); }, [data]);
+  if (!s) return null;
+
+  const save = async () => {
+    const { error } = await supabase.from("settings").update({
+      whatsapp_number: s.whatsapp_number, wholesale_whatsapp: s.wholesale_whatsapp,
+      shipping_flat_rate: s.shipping_flat_rate, free_shipping_threshold: s.free_shipping_threshold,
+      bank_details: s.bank_details, contact_email: s.contact_email, contact_phone: s.contact_phone,
+      pickup_address: s.pickup_address, instagram_url: s.instagram_url, facebook_url: s.facebook_url,
+      notification_email: s.notification_email,
+    }).eq("id", 1);
+    if (error) { toast({ title: "Save failed", description: error.message, variant: "destructive" }); return; }
+    qc.invalidateQueries({ queryKey: ["admin-settings"] });
+    qc.invalidateQueries({ queryKey: ["settings"] });
+    toast({ title: "Settings saved" });
+  };
 
   return (
-    <div className="grid max-w-2xl gap-4 rounded-lg border border-border bg-background p-6">
-      <div>
-        <Label>WhatsApp number (digits only, with country code)</Label>
-        <Input value={s.whatsappNumber} onChange={(e) => setS({ ...s, whatsappNumber: e.target.value.replace(/\D/g, "") })} className="mt-1" />
-      </div>
+    <div className="grid max-w-3xl gap-4 rounded-lg border border-border bg-background p-6">
       <div className="grid gap-3 sm:grid-cols-2">
-        <div>
-          <Label>Flat shipping rate (Rs.)</Label>
-          <Input type="number" value={s.shippingFlatRate} onChange={(e) => setS({ ...s, shippingFlatRate: Number(e.target.value) || 0 })} className="mt-1" />
-        </div>
-        <div>
-          <Label>Free shipping threshold (Rs.)</Label>
-          <Input type="number" value={s.freeShippingThreshold} onChange={(e) => setS({ ...s, freeShippingThreshold: Number(e.target.value) || 0 })} className="mt-1" />
-        </div>
+        <div><Label>WhatsApp number (digits, with country code)</Label><Input value={s.whatsapp_number} onChange={(e) => setS({ ...s, whatsapp_number: e.target.value.replace(/\D/g, "") })} className="mt-1" /></div>
+        <div><Label>Wholesale WhatsApp (optional)</Label><Input value={s.wholesale_whatsapp ?? ""} onChange={(e) => setS({ ...s, wholesale_whatsapp: e.target.value.replace(/\D/g, "") || null })} className="mt-1" /></div>
+        <div><Label>Flat shipping rate (Rs.)</Label><Input type="number" value={s.shipping_flat_rate} onChange={(e) => setS({ ...s, shipping_flat_rate: Number(e.target.value) || 0 })} className="mt-1" /></div>
+        <div><Label>Free shipping threshold (Rs.)</Label><Input type="number" value={s.free_shipping_threshold} onChange={(e) => setS({ ...s, free_shipping_threshold: Number(e.target.value) || 0 })} className="mt-1" /></div>
+        <div><Label>Contact phone</Label><Input value={s.contact_phone ?? ""} onChange={(e) => setS({ ...s, contact_phone: e.target.value })} className="mt-1" /></div>
+        <div><Label>Contact email</Label><Input value={s.contact_email} onChange={(e) => setS({ ...s, contact_email: e.target.value })} className="mt-1" /></div>
+        <div><Label>Notification email (orders/inquiries)</Label><Input value={s.notification_email} onChange={(e) => setS({ ...s, notification_email: e.target.value })} className="mt-1" /></div>
+        <div><Label>Pickup address</Label><Input value={s.pickup_address ?? ""} onChange={(e) => setS({ ...s, pickup_address: e.target.value })} className="mt-1" /></div>
+        <div><Label>Instagram URL</Label><Input value={s.instagram_url ?? ""} onChange={(e) => setS({ ...s, instagram_url: e.target.value })} className="mt-1" /></div>
+        <div><Label>Facebook URL</Label><Input value={s.facebook_url ?? ""} onChange={(e) => setS({ ...s, facebook_url: e.target.value })} className="mt-1" /></div>
       </div>
-      <div>
-        <Label>Contact phone</Label>
-        <Input value={s.contactPhone} onChange={(e) => setS({ ...s, contactPhone: e.target.value })} className="mt-1" />
-      </div>
-      <div>
-        <Label>Contact email</Label>
-        <Input value={s.contactEmail} onChange={(e) => setS({ ...s, contactEmail: e.target.value })} className="mt-1" />
-      </div>
-      <div>
-        <Label>Pickup address</Label>
-        <Input value={s.pickupAddress} onChange={(e) => setS({ ...s, pickupAddress: e.target.value })} className="mt-1" />
-      </div>
-      <div>
-        <Label>Bank transfer details</Label>
-        <Textarea value={s.bankDetails} rows={5} onChange={(e) => setS({ ...s, bankDetails: e.target.value })} className="mt-1 font-mono text-xs" />
-      </div>
+      <div><Label>Bank transfer details</Label><Textarea value={s.bank_details} rows={5} onChange={(e) => setS({ ...s, bank_details: e.target.value })} className="mt-1 font-mono text-xs" /></div>
       <Button onClick={save} className="bg-espresso text-cream hover:bg-espresso/90">Save settings</Button>
     </div>
   );
