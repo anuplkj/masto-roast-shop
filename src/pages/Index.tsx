@@ -1,49 +1,20 @@
 import { Link } from "react-router-dom";
-import { useState } from "react";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
+import { useQuery } from "@tanstack/react-query";
 import { Coffee, Flame, Leaf, Phone, MessageCircle, MapPin, Mail, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import ProductCard from "@/components/ProductCard";
-import { getProducts, getSettings } from "@/lib/store";
+import WhatsAppFloat from "@/components/WhatsAppFloat";
+import { fetchProducts } from "@/lib/api";
+import { useSettings } from "@/hooks/useSettings";
 import { whatsappLink } from "@/lib/whatsapp";
-import { toast } from "@/hooks/use-toast";
-
-const wholesaleSchema = z.object({
-  name: z.string().trim().min(2, "Required").max(80),
-  business: z.string().trim().min(2, "Required").max(120),
-  phone: z.string().trim().min(7, "Enter a valid phone").max(20),
-  monthly: z.string().trim().min(1, "Required").max(60),
-  notes: z.string().trim().max(500).optional(),
-});
-type WholesaleForm = z.infer<typeof wholesaleSchema>;
 
 export default function Index() {
-  const settings = getSettings();
-  const featured = getProducts().filter((p) => p.featured && p.active).slice(0, 6);
-
-  const { register, handleSubmit, formState: { errors }, reset } = useForm<WholesaleForm>({
-    resolver: zodResolver(wholesaleSchema),
-  });
-  const [submitted, setSubmitted] = useState(false);
-
-  const onWholesale = (data: WholesaleForm) => {
-    const text =
-      `*Wholesale Inquiry — Masto Roastery*\n` +
-      `Name: ${data.name}\nBusiness: ${data.business}\nPhone: ${data.phone}\n` +
-      `Monthly requirement: ${data.monthly}\n` +
-      (data.notes ? `Notes: ${data.notes}` : "");
-    window.open(whatsappLink(text), "_blank", "noopener");
-    setSubmitted(true);
-    reset();
-    toast({ title: "Inquiry ready to send", description: "WhatsApp opened in a new tab." });
-  };
+  const { data: settings } = useSettings();
+  const { data: products = [] } = useQuery({ queryKey: ["products"], queryFn: fetchProducts });
+  const featured = products.filter((p) => p.featured && p.active).slice(0, 6);
+  const wa = settings?.whatsapp_number ?? "";
 
   return (
     <div className="min-h-screen bg-background">
@@ -58,7 +29,7 @@ export default function Index() {
               <span className="h-1.5 w-1.5 rounded-full bg-terracotta" /> Roasted in Nepal
             </div>
             <h1 className="mt-6 font-serif text-5xl leading-[1.05] text-cream md:text-6xl lg:text-7xl">
-              Masto Artisan<br />Roastery
+              {settings?.brand_name ?? "Masto Artisan Roastery"}
             </h1>
             <p className="mt-5 max-w-md text-lg text-cream/75">
               Roasted with tradition, crafted for taste. Small-batch specialty coffee from the highlands of Nepal.
@@ -68,14 +39,18 @@ export default function Index() {
                 <Link to="/shop">Shop Coffee <ArrowRight className="ml-2 h-4 w-4" /></Link>
               </Button>
               <Button asChild size="lg" variant="outline" className="border-cream/30 bg-transparent text-cream hover:bg-cream/10 hover:text-cream">
-                <a href="#story">Our story</a>
+                <Link to="/story">Our story</Link>
               </Button>
             </div>
           </div>
           <div className="relative hidden md:block">
             <div className="relative mx-auto aspect-square w-full max-w-md rounded-full bg-gradient-to-br from-terracotta/30 to-espresso/40 p-12 backdrop-blur">
               <div className="flex h-full w-full items-center justify-center rounded-full border border-cream/15">
-                <Coffee className="h-32 w-32 text-cream/40" strokeWidth={0.8} />
+                {settings?.logo_url ? (
+                  <img src={settings.logo_url} alt={settings.brand_name} className="max-h-3/4 max-w-3/4 object-contain" />
+                ) : (
+                  <Coffee className="h-32 w-32 text-cream/40" strokeWidth={0.8} />
+                )}
               </div>
             </div>
           </div>
@@ -94,12 +69,12 @@ export default function Index() {
           </Link>
         </div>
         <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {featured.map((p) => <ProductCard key={p.slug} product={p} />)}
+          {featured.map((p) => <ProductCard key={p.id} product={p} />)}
         </div>
       </section>
 
-      {/* Story */}
-      <section id="story" className="bg-beige/40 py-20">
+      {/* Story snippet */}
+      <section className="bg-beige/40 py-20">
         <div className="container grid gap-12 md:grid-cols-2 md:items-center">
           <div>
             <div className="text-xs font-semibold uppercase tracking-[0.2em] text-accent">Our story</div>
@@ -107,9 +82,9 @@ export default function Index() {
             <p className="mt-5 text-foreground/75">
               We're a tiny roastery in Kathmandu Valley, working directly with farmers in the hills of Ilam, Gulmi and Sindhuli. Every batch is roasted in small drums, cupped the same week it's roasted, and shipped within days.
             </p>
-            <p className="mt-4 text-foreground/75">
-              No shortcuts. No old beans. Just careful work, honest sourcing, and a cup we'd be proud to drink ourselves.
-            </p>
+            <Button asChild variant="outline" className="mt-6">
+              <Link to="/story">Read our story <ArrowRight className="ml-2 h-4 w-4" /></Link>
+            </Button>
           </div>
           <div className="relative aspect-[4/3] overflow-hidden rounded-2xl bg-gradient-to-br from-espresso to-[hsl(22_45%_14%)]">
             <div className="absolute inset-0 opacity-[0.08] [background-image:radial-gradient(white_1px,transparent_1px)] [background-size:14px_14px]" />
@@ -120,7 +95,7 @@ export default function Index() {
         </div>
       </section>
 
-      {/* Freshness callout */}
+      {/* Freshness */}
       <section className="container py-20">
         <div className="grid gap-6 md:grid-cols-3">
           {[
@@ -137,49 +112,28 @@ export default function Index() {
         </div>
       </section>
 
-      {/* Wholesale */}
-      <section id="wholesale" className="bg-espresso py-20 text-cream">
-        <div className="container grid gap-12 md:grid-cols-5">
-          <div className="md:col-span-2">
+      {/* Wholesale CTA */}
+      <section className="bg-espresso py-20 text-cream">
+        <div className="container grid gap-8 md:grid-cols-2 md:items-center">
+          <div>
             <div className="text-xs font-semibold uppercase tracking-[0.2em] text-terracotta">Wholesale</div>
             <h2 className="mt-2 font-serif text-4xl">For cafés & restaurants</h2>
             <p className="mt-5 text-cream/75">
               Looking for a reliable roaster for your shop? We supply specialty coffee to cafés across Nepal — bespoke blends, training, and steady weekly delivery.
             </p>
-            <p className="mt-4 text-cream/75">Tell us a bit about your business and we'll be in touch within a day.</p>
           </div>
-          <form onSubmit={handleSubmit(onWholesale)} className="md:col-span-3 grid gap-4 rounded-xl border border-cream/15 bg-cream/5 p-6 backdrop-blur">
-            <div className="grid gap-4 md:grid-cols-2">
-              <div>
-                <Label htmlFor="ws-name" className="text-cream/85">Your name</Label>
-                <Input id="ws-name" {...register("name")} className="mt-1 border-cream/20 bg-cream/5 text-cream placeholder:text-cream/40" />
-                {errors.name && <p className="mt-1 text-xs text-terracotta">{errors.name.message}</p>}
-              </div>
-              <div>
-                <Label htmlFor="ws-business" className="text-cream/85">Business name</Label>
-                <Input id="ws-business" {...register("business")} className="mt-1 border-cream/20 bg-cream/5 text-cream placeholder:text-cream/40" />
-                {errors.business && <p className="mt-1 text-xs text-terracotta">{errors.business.message}</p>}
-              </div>
-              <div>
-                <Label htmlFor="ws-phone" className="text-cream/85">Phone</Label>
-                <Input id="ws-phone" {...register("phone")} className="mt-1 border-cream/20 bg-cream/5 text-cream placeholder:text-cream/40" />
-                {errors.phone && <p className="mt-1 text-xs text-terracotta">{errors.phone.message}</p>}
-              </div>
-              <div>
-                <Label htmlFor="ws-monthly" className="text-cream/85">Monthly requirement</Label>
-                <Input id="ws-monthly" placeholder="e.g. 10kg" {...register("monthly")} className="mt-1 border-cream/20 bg-cream/5 text-cream placeholder:text-cream/40" />
-                {errors.monthly && <p className="mt-1 text-xs text-terracotta">{errors.monthly.message}</p>}
-              </div>
-            </div>
-            <div>
-              <Label htmlFor="ws-notes" className="text-cream/85">Anything else? (optional)</Label>
-              <Textarea id="ws-notes" rows={3} {...register("notes")} className="mt-1 border-cream/20 bg-cream/5 text-cream placeholder:text-cream/40" />
-            </div>
-            <Button type="submit" size="lg" className="bg-terracotta text-cream hover:bg-terracotta/90">
-              <MessageCircle className="mr-2 h-4 w-4" /> Send via WhatsApp
+          <div className="flex flex-wrap gap-3 md:justify-end">
+            <Button asChild size="lg" className="bg-terracotta text-cream hover:bg-terracotta/90">
+              <Link to="/wholesale">Wholesale inquiries <ArrowRight className="ml-2 h-4 w-4" /></Link>
             </Button>
-            {submitted && <p className="text-sm text-cream/70">Thanks — we'll be in touch soon.</p>}
-          </form>
+            {wa && (
+              <Button asChild size="lg" variant="outline" className="border-cream/30 bg-transparent text-cream hover:bg-cream/10 hover:text-cream">
+                <a href={whatsappLink("Hi Masto, I'd like to inquire about wholesale.", settings?.wholesale_whatsapp || wa)} target="_blank" rel="noopener">
+                  <MessageCircle className="mr-2 h-4 w-4" /> WhatsApp us
+                </a>
+              </Button>
+            )}
+          </div>
         </div>
       </section>
 
@@ -194,39 +148,48 @@ export default function Index() {
             </p>
           </div>
           <div className="grid gap-3">
-            <a href={`tel:${settings.contactPhone}`} className="flex items-center gap-3 rounded-lg border border-border/60 bg-card p-4 hover:shadow-card">
-              <Phone className="h-5 w-5 text-accent" />
-              <div>
-                <div className="text-xs uppercase tracking-wider text-muted-foreground">Phone</div>
-                <div className="font-medium">{settings.contactPhone}</div>
+            {settings?.contact_phone && (
+              <a href={`tel:${settings.contact_phone}`} className="flex items-center gap-3 rounded-lg border border-border/60 bg-card p-4 hover:shadow-card">
+                <Phone className="h-5 w-5 text-accent" />
+                <div>
+                  <div className="text-xs uppercase tracking-wider text-muted-foreground">Phone</div>
+                  <div className="font-medium">{settings.contact_phone}</div>
+                </div>
+              </a>
+            )}
+            {wa && (
+              <a href={whatsappLink("Hi Masto, I have a question.", wa)} target="_blank" rel="noopener" className="flex items-center gap-3 rounded-lg border border-border/60 bg-card p-4 hover:shadow-card">
+                <MessageCircle className="h-5 w-5 text-accent" />
+                <div>
+                  <div className="text-xs uppercase tracking-wider text-muted-foreground">WhatsApp</div>
+                  <div className="font-medium">Chat with us</div>
+                </div>
+              </a>
+            )}
+            {settings?.contact_email && (
+              <a href={`mailto:${settings.contact_email}`} className="flex items-center gap-3 rounded-lg border border-border/60 bg-card p-4 hover:shadow-card">
+                <Mail className="h-5 w-5 text-accent" />
+                <div>
+                  <div className="text-xs uppercase tracking-wider text-muted-foreground">Email</div>
+                  <div className="font-medium">{settings.contact_email}</div>
+                </div>
+              </a>
+            )}
+            {settings?.pickup_address && (
+              <div className="flex items-center gap-3 rounded-lg border border-border/60 bg-card p-4">
+                <MapPin className="h-5 w-5 text-accent" />
+                <div>
+                  <div className="text-xs uppercase tracking-wider text-muted-foreground">Roastery</div>
+                  <div className="font-medium">{settings.pickup_address}</div>
+                </div>
               </div>
-            </a>
-            <a href={whatsappLink("Hi Masto, I have a question.")} target="_blank" rel="noopener" className="flex items-center gap-3 rounded-lg border border-border/60 bg-card p-4 hover:shadow-card">
-              <MessageCircle className="h-5 w-5 text-accent" />
-              <div>
-                <div className="text-xs uppercase tracking-wider text-muted-foreground">WhatsApp</div>
-                <div className="font-medium">Chat with us</div>
-              </div>
-            </a>
-            <a href={`mailto:${settings.contactEmail}`} className="flex items-center gap-3 rounded-lg border border-border/60 bg-card p-4 hover:shadow-card">
-              <Mail className="h-5 w-5 text-accent" />
-              <div>
-                <div className="text-xs uppercase tracking-wider text-muted-foreground">Email</div>
-                <div className="font-medium">{settings.contactEmail}</div>
-              </div>
-            </a>
-            <div className="flex items-center gap-3 rounded-lg border border-border/60 bg-card p-4">
-              <MapPin className="h-5 w-5 text-accent" />
-              <div>
-                <div className="text-xs uppercase tracking-wider text-muted-foreground">Roastery</div>
-                <div className="font-medium">{settings.pickupAddress}</div>
-              </div>
-            </div>
+            )}
           </div>
         </div>
       </section>
 
       <Footer />
+      <WhatsAppFloat />
     </div>
   );
 }
