@@ -13,7 +13,16 @@ export default {
       },
     },
     extend: {
+      fontFamily: {
+        serif: ['Fraunces', 'Georgia', 'serif'],
+        sans: ['Inter', 'system-ui', 'sans-serif'],
+      },
       colors: {
+        cream: "hsl(var(--cream))",
+        beige: "hsl(var(--beige))",
+        espresso: "hsl(var(--espresso))",
+        crema: "hsl(var(--crema))",
+        terracotta: "hsl(var(--terracotta))",
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
