@@ -1,89 +1,123 @@
-# Masto Artisan Roastery — Webstore Plan
+## Goal
 
-A clean, warm, mobile-first coffee e-commerce site. Frontend-only (no backend yet): products live in code, cart lives in browser storage, orders are sent to you via WhatsApp, and a password-gated admin manages products/stock locally.
+Migrate the Masto Artisan Roastery site from the current `localStorage`-based prototype to a real Supabase backend (via Lovable Cloud), add the missing pages (Wholesale, Story & Gallery), wire all admin tools to the database, and send email notifications to `mastoartisanroastry@gmail.com` on every order and wholesale inquiry.
 
-## Brand & Design System
+## Architecture overview
 
-- **Palette:** warm earthy tones — deep coffee brown, espresso, beige, cream/off-white, muted terracotta accent
-- **Typography:** serif for headings (artisan feel), clean sans-serif for body
-- **Feel:** generous whitespace, soft shadows, rounded-but-restrained corners, premium yet approachable
-- **Tagline:** "Roasted with Tradition, Crafted for Taste"
-- All tokens defined in `index.css` + `tailwind.config.ts` (HSL variables, semantic classes — no hardcoded colors in components)
+- **Backend**: Lovable Cloud (managed Supabase) for Postgres, Storage, Auth, and Edge Functions.
+- **Email**: Lovable Emails (built-in transactional email infrastructure) sending to `mastoartisanroastry@gmail.com` from a verified sender domain.
+- **Auth**: Email/password admin auth (replaces the hardcoded `masto2025` password — that approach is insecure and will be removed). The first signed-up email becomes the admin via a `user_roles` table.
+- **Storage**: Two public Storage buckets — `product-images` and `gallery` — with size/MIME limits. Brand logo also stored here.
+- **Data fetching**: TanStack Query (already installed) for caching/invalidation. Cart stays in `localStorage` (already persists across refresh — requirement met).
+- **Currency**: NPR throughout (already done).
 
-## Pages & Structure
+## Database schema (new migration)
 
-### 1. Homepage (`/`)
-- Sticky minimal header: logo, nav (Shop, Story, Wholesale, Contact), cart icon with count
-- **Hero:** brand name, tagline, "Shop Coffee" CTA, soft coffee-tone background
-- **Featured products:** 3–6 cards with name, starting price, flavor note
-- **Brand story:** short paragraph — Nepal-based artisan roasting
-- **Freshness & sourcing callout:** two-up section (e.g. "Roasted to order" / "Single-origin sourcing")
-- **Wholesale inquiry form:** name, business name, phone, monthly requirement → submits via WhatsApp link
-- **Contact:** phone + WhatsApp button, email, location
-- Footer
+```text
+products            id, slug (unique), name, short_note, description,
+                    flavor_notes (text[]), roast, process, brew_recommendations (text[]),
+                    origin, image_url, active, featured, created_at
+product_variants    id, product_id (fk), weight ('250g'|'500g'|'1kg'),
+                    price_npr (int), stock (int), unique(product_id, weight)
+orders              id, created_at, customer_name, customer_phone, customer_address,
+                    delivery ('delivery'|'pickup'), payment ('cod'|'bank'),
+                    subtotal, shipping, discount, coupon_code, total, status
+order_items         id, order_id (fk), product_id, name, weight, qty, unit_price
+wholesale_inquiries id, created_at, name, business, phone, monthly_demand, notes, status
+gallery_images      id, created_at, image_url, caption, sort_order
+coupons             code (pk), type ('percent'|'flat'), value, active
+settings            id (singleton), whatsapp_number, shipping_flat_rate,
+                    free_shipping_threshold, bank_details, contact_email,
+                    contact_phone, pickup_address, instagram_url, facebook_url,
+                    logo_url, brand_name
+profiles            id (=auth.uid), email, created_at
+user_roles          id, user_id, role ('admin'|'user')  -- separate table for security
+```
 
-### 2. Shop (`/shop`)
-- Responsive product grid (1 col mobile → 2 → 3 desktop)
-- Optional filters: roast level, process (washed/natural)
-- Card: image placeholder, name, "from Rs. X", short flavor note
+**RLS policies (critical for security):**
+- `products`, `product_variants`, `gallery_images`, `coupons`, `settings` → public **SELECT**; admin-only INSERT/UPDATE/DELETE (via `has_role(auth.uid(),'admin')`).
+- `orders`, `order_items`, `wholesale_inquiries` → public **INSERT** (anyone can submit); admin-only SELECT/UPDATE.
+- `user_roles` → admin-only writes; `has_role()` is `SECURITY DEFINER` to avoid recursive RLS.
+- `profiles` → user can read/update their own.
 
-### 3. Product detail (`/product/:slug`)
-- Image, name, flavor notes, roast level, process, brew recommendations
-- **Variant selector:** 250g / 500g / 1kg — price updates live
-- Quantity selector
-- Add to cart (toast confirmation)
-- Per-variant stock awareness ("Only 3 left", "Out of stock" disables button)
+Seed data: insert the 6 existing coffees from `src/data/products.ts` plus default settings.
 
-### 4. Cart (`/cart`)
-- Line items with variant, qty +/-, remove
-- Subtotal, shipping (flat rate, free above threshold), total
-- "Checkout" CTA
+## Storage buckets
 
-### 5. Checkout (`/checkout`)
-- Fields: name, phone, address (zod validation)
-- Delivery method: Delivery (flat rate / free above threshold) or Local Pickup (free)
-- Payment method: Cash on Delivery or Bank Transfer (shows manual bank details)
-- Optional coupon code field
-- "Place Order" → generates order ID, saves order locally, opens WhatsApp with pre-filled order details (items, totals, customer info, payment method)
+- `product-images` (public, 5MB max, image/* only)
+- `gallery` (public, 5MB max, image/* only)
+- `branding` (public, 2MB max, image/* only) — for the logo
 
-### 6. Order Confirmation (`/order/:id`)
-- Order summary
-- "We'll call you shortly to confirm" message
-- Bank transfer instructions (if selected)
-- "Send order again via WhatsApp" button
+RLS: public read; admin-only write/delete on `storage.objects` for these buckets.
 
-### 7. Admin (`/admin`)
-- Password gate (password stored in code, session kept in sessionStorage)
-- **Orders tab:** list of locally saved orders, status (new / confirmed / fulfilled), detail view
-- **Products tab:** edit name, description, flavor notes, prices per variant, stock per variant, active/inactive
-- **Coupons tab:** create simple % or flat discount codes
-- **Settings tab:** WhatsApp number, flat shipping rate, free-shipping threshold, bank details
-- All admin data persists to `localStorage`
+## Edge Functions
 
-## Functional Behavior
+1. **`send-order-notification`** — invoked client-side after order insert. Calls `send-transactional-email` with template `new-order`, recipient `mastoartisanroastry@gmail.com`, contains order details.
+2. **`send-wholesale-notification`** — same pattern, template `new-wholesale-inquiry`.
+3. **`send-transactional-email`** + queue infra — auto-created by Lovable Emails setup.
 
-- **Cart:** React Context + localStorage, persists across reloads
-- **Inventory:** decremented locally on order placement, per variant
-- **Coupons:** validated at checkout, applied to subtotal
-- **Shipping logic:** flat rate; free above configurable threshold; pickup = free
-- **WhatsApp send:** formatted text message with order summary opens in new tab via `wa.me/<number>?text=...`
-- **Form validation:** zod + react-hook-form on all inputs (length limits, phone format, required fields)
+Email templates (React Email, white background, brand styling):
+- `new-order`: order ID, customer info, itemized list, totals, status link.
+- `new-wholesale-inquiry`: inquirer details and monthly demand.
 
-## Key Limitations of Frontend-Only Mode
+## Frontend changes
 
-So you go in eyes-open:
-- Orders are **only saved on the device that placed them** — admin on a different phone/browser won't see them. WhatsApp message is the real source of truth.
-- Inventory counts are **per-browser**, not global — two customers can technically buy the last bag.
-- Admin password lives in the JS bundle — anyone determined can read it. Fine as a casual gate, not real security.
-- Email notifications aren't included (you chose WhatsApp-only).
+### New files
+- `src/integrations/supabase/client.ts` (auto-generated by Cloud)
+- `src/lib/api/products.ts`, `orders.ts`, `wholesale.ts`, `gallery.ts`, `settings.ts`, `coupons.ts` — typed Supabase queries
+- `src/lib/upload.ts` — image upload helper with client-side resize (max 1600px, ~0.85 quality) before sending to Storage
+- `src/pages/Wholesale.tsx` — dedicated B2B page with inquiry form (writes to `wholesale_inquiries` + triggers email + offers WhatsApp button)
+- `src/pages/Story.tsx` — brand story + responsive lazy-loaded gallery (`loading="lazy"` on `<img>`)
+- `src/pages/AdminLogin.tsx` — email/password login (replaces password gate)
+- `src/components/WhatsAppFloat.tsx` — floating chat button (homepage and others)
+- `src/components/admin/ProductsManager.tsx`, `GalleryManager.tsx`, `OrdersManager.tsx`, `InquiriesManager.tsx`, `BrandingManager.tsx`, `SettingsManager.tsx`, `CouponsManager.tsx`
 
-When ready, this can be upgraded to Lovable Cloud to fix all of the above without rebuilding the UI.
+### Modified files
+- `src/App.tsx` — add routes `/wholesale`, `/story`, `/admin/login`; wrap Admin in auth guard.
+- `src/lib/store.ts` — replaced by API modules; cart helpers stay (still localStorage).
+- `src/context/CartContext.tsx` — read product/variant data from Supabase via TanStack Query instead of `getProducts()`.
+- `src/components/Header.tsx` — render uploaded logo when present, "Story" + "Wholesale" nav links pointing to real pages.
+- `src/components/Footer.tsx` — Instagram + Facebook icon links from `settings`.
+- `src/components/ProductCard.tsx`, `src/pages/ProductPage.tsx`, `Shop.tsx`, `Index.tsx` — fetch from Supabase, show uploaded `image_url` (with placeholder fallback), variants from `product_variants`.
+- `src/pages/Checkout.tsx` — insert into `orders` + `order_items`, then invoke `send-order-notification`. WhatsApp confirmation still offered.
+- `src/pages/OrderConfirmation.tsx` — fetch order from DB by id.
+- `src/pages/Index.tsx` — featured products from DB, link "Shop Coffee" CTA, "Wholesale" CTA points to `/wholesale`, story snippet links to `/story`, mount `WhatsAppFloat`.
 
-## Technical Notes
+### Admin dashboard — full rebuild
 
-- React + Vite + Tailwind + shadcn/ui (already set up)
-- Routes added in `App.tsx`
-- Cart context in `src/context/CartContext.tsx`
-- Product/order/settings stores in `src/lib/store.ts` (localStorage-backed)
-- Seed catalog (~6 coffees) in `src/data/products.ts` with neutral placeholder imagery
-- All copy in warm, confident, non-technical tone emphasizing freshness & craft
+New `/admin` (auth-gated, admin role required) with tabs:
+
+1. **Orders** — list orders with status updates (new/confirmed/fulfilled/cancelled).
+2. **Inquiries** — list wholesale submissions; mark contacted.
+3. **Products** — full CRUD: add new, edit (incl. all 3 variants pricing/stock), delete (confirm dialog), toggle active/featured, upload product image (resized → uploaded to `product-images` bucket → `image_url` saved on row).
+4. **Gallery** — upload multiple photos to `gallery` bucket, reorder, delete; appears live on `/story`.
+5. **Branding** — upload logo (to `branding` bucket), edit brand name; reflected immediately in Header.
+6. **Coupons** — add/edit/delete/toggle.
+7. **Settings** — WhatsApp number, shipping, bank details, contact info, Instagram & Facebook URLs, pickup address.
+
+## Security notes
+
+- Hardcoded `ADMIN_PASSWORD = "masto2025"` is removed. Auth is handled by Supabase Auth with proper sessions.
+- Roles live in a dedicated `user_roles` table (never on profiles) and are checked via a `SECURITY DEFINER` `has_role()` function — prevents recursive-RLS pitfalls and privilege escalation.
+- All form inputs validated with Zod (existing pattern) plus DB-level constraints.
+- WhatsApp links use `encodeURIComponent`.
+
+## Setup the user needs to do (after I build it)
+
+1. **Create the admin account**: Sign up at `/admin/login` with `mastoartisanroastry@gmail.com`. I'll add a one-time SQL/UI step to grant that user the `admin` role on first signup.
+2. **Confirm the email domain** for sending emails — I'll prompt this during build via the email-domain setup dialog. Required so emails can actually leave from your branded sender.
+3. **Add real product photos and gallery photos** in `/admin` once it's live.
+
+## Out of scope (can add later if you want)
+
+- Online payment gateway (eSewa/Khalti/Stripe) — checkout stays COD + bank transfer + WhatsApp.
+- Customer accounts / order history for shoppers.
+- Multi-image product galleries (one hero image per product for now).
+- Inventory webhooks, analytics, multi-currency.
+
+## File touch summary
+
+- New migration: schema + RLS + seed.
+- New buckets: `product-images`, `gallery`, `branding` + RLS.
+- New edge functions: `send-order-notification`, `send-wholesale-notification`, plus Lovable Emails infra + 2 templates.
+- ~10 new frontend files, ~10 modified.
