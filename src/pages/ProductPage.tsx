@@ -1,0 +1,125 @@
+import { useState } from "react";
+import { Link, useParams } from "react-router-dom";
+import { Minus, Plus, ShoppingBag, ArrowLeft } from "lucide-react";
+import Header from "@/components/Header";
+import Footer from "@/components/Footer";
+import ProductImage from "@/components/ProductImage";
+import { Button } from "@/components/ui/button";
+import { getProduct, formatNPR } from "@/lib/store";
+import { useCart } from "@/context/CartContext";
+import { toast } from "@/hooks/use-toast";
+import type { Variant } from "@/data/products";
+
+const VARIANTS: Variant[] = ["250g", "500g", "1kg"];
+
+export default function ProductPage() {
+  const { slug } = useParams();
+  const product = slug ? getProduct(slug) : undefined;
+  const { add } = useCart();
+  const [variant, setVariant] = useState<Variant>("250g");
+  const [qty, setQty] = useState(1);
+
+  if (!product) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <div className="container py-24 text-center">
+          <h1 className="font-serif text-3xl">Coffee not found</h1>
+          <Button asChild className="mt-6"><Link to="/shop">Back to shop</Link></Button>
+        </div>
+        <Footer />
+      </div>
+    );
+  }
+
+  const stock = product.stock[variant];
+  const price = product.prices[variant];
+  const outOfStock = stock <= 0;
+
+  const handleAdd = () => {
+    add(product.slug, variant, qty);
+    toast({ title: "Added to cart", description: `${product.name} (${variant}) × ${qty}` });
+  };
+
+  return (
+    <div className="min-h-screen bg-background">
+      <Header />
+      <div className="container py-8">
+        <Link to="/shop" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
+          <ArrowLeft className="h-4 w-4" /> All coffee
+        </Link>
+      </div>
+
+      <section className="container grid gap-10 pb-16 md:grid-cols-2">
+        <ProductImage className="aspect-square rounded-2xl" label={product.process} />
+
+        <div>
+          <div className="text-xs uppercase tracking-[0.2em] text-accent">{product.origin}</div>
+          <h1 className="mt-2 font-serif text-4xl leading-tight text-espresso md:text-5xl">{product.name}</h1>
+          <p className="mt-3 text-lg text-muted-foreground">{product.shortNote}</p>
+
+          <div className="mt-6 text-3xl font-medium">{formatNPR(price)}</div>
+          {outOfStock ? (
+            <div className="mt-1 text-sm text-destructive">Out of stock</div>
+          ) : stock <= 5 ? (
+            <div className="mt-1 text-sm text-accent">Only {stock} left</div>
+          ) : null}
+
+          <div className="mt-6">
+            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Size</div>
+            <div className="mt-2 flex gap-2">
+              {VARIANTS.map((v) => {
+                const isOOS = product.stock[v] <= 0;
+                return (
+                  <button
+                    key={v}
+                    onClick={() => { setVariant(v); setQty(1); }}
+                    disabled={isOOS}
+                    className={`relative rounded-md border px-4 py-2 text-sm font-medium transition-colors disabled:opacity-40 ${
+                      variant === v ? "border-espresso bg-espresso text-cream" : "border-border hover:border-espresso/50"
+                    }`}
+                  >
+                    {v}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="mt-6">
+            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Quantity</div>
+            <div className="mt-2 inline-flex items-center rounded-md border border-border">
+              <button onClick={() => setQty((q) => Math.max(1, q - 1))} className="px-3 py-2 hover:bg-secondary"><Minus className="h-4 w-4" /></button>
+              <span className="w-10 text-center text-sm font-medium">{qty}</span>
+              <button onClick={() => setQty((q) => Math.min(stock || 99, q + 1))} className="px-3 py-2 hover:bg-secondary"><Plus className="h-4 w-4" /></button>
+            </div>
+          </div>
+
+          <Button size="lg" className="mt-6 w-full bg-espresso text-cream hover:bg-espresso/90" onClick={handleAdd} disabled={outOfStock}>
+            <ShoppingBag className="mr-2 h-4 w-4" /> {outOfStock ? "Out of stock" : `Add to cart — ${formatNPR(price * qty)}`}
+          </Button>
+
+          <div className="mt-10 grid gap-6 border-t border-border/60 pt-8 sm:grid-cols-2">
+            <DetailBlock title="Roast">{product.roast}</DetailBlock>
+            <DetailBlock title="Process">{product.process}</DetailBlock>
+            <DetailBlock title="Flavor notes">{product.flavorNotes.join(" · ")}</DetailBlock>
+            <DetailBlock title="Brew recommendations">{product.brewRecommendations.join(", ")}</DetailBlock>
+          </div>
+
+          <p className="mt-8 text-foreground/75">{product.description}</p>
+        </div>
+      </section>
+
+      <Footer />
+    </div>
+  );
+}
+
+function DetailBlock({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{title}</div>
+      <div className="mt-1 text-sm">{children}</div>
+    </div>
+  );
+}
