@@ -11,9 +11,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useCart } from "@/context/CartContext";
-import {
-  formatNPR, getCoupons, getProduct, getSettings, saveOrder, saveProducts, getProducts, type Order,
-} from "@/lib/store";
+import { useSettings } from "@/hooks/useSettings";
+import { fetchActiveCoupon, formatNPR } from "@/lib/api";
+import { supabase } from "@/integrations/supabase/client";
 import { orderToWhatsappText, whatsappLink } from "@/lib/whatsapp";
 import { toast } from "@/hooks/use-toast";
 
@@ -24,16 +24,20 @@ const schema = z.object({
   delivery: z.enum(["delivery", "pickup"]),
   payment: z.enum(["cod", "bank"]),
   coupon: z.string().trim().max(40).optional(),
+  notes: z.string().trim().max(500).optional(),
 });
 type FormValues = z.infer<typeof schema>;
 
 export default function Checkout() {
-  const { items, subtotal, clear } = useCart();
-  const settings = getSettings();
+  const { items, subtotal, clear, productsById } = useCart();
+  const { data: settings } = useSettings();
   const navigate = useNavigate();
+  const [discount, setDiscount] = useState(0);
+  const [appliedCode, setAppliedCode] = useState<string | undefined>();
   const [couponMsg, setCouponMsg] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
-  const { register, handleSubmit, watch, formState: { errors, isSubmitting } } = useForm<FormValues>({
+  const { register, handleSubmit, watch, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: { delivery: "delivery", payment: "cod" },
   });
@@ -42,58 +46,103 @@ export default function Checkout() {
   const payment = watch("payment");
   const couponCode = watch("coupon");
 
-  const { discount, appliedCode } = useMemo(() => {
-    if (!couponCode) return { discount: 0, appliedCode: undefined as string | undefined };
-    const c = getCoupons().find((x) => x.active && x.code.toLowerCase() === couponCode.trim().toLowerCase());
-    if (!c) return { discount: 0, appliedCode: undefined };
-    const d = c.type === "percent" ? Math.round((subtotal * c.value) / 100) : Math.min(c.value, subtotal);
-    return { discount: d, appliedCode: c.code };
-  }, [couponCode, subtotal]);
+  const flat = settings?.shipping_flat_rate ?? 200;
+  const threshold = settings?.free_shipping_threshold ?? 3000;
 
-  const shipping = delivery === "pickup" || subtotal === 0
-    ? 0
-    : (subtotal - discount) >= settings.freeShippingThreshold ? 0 : settings.shippingFlatRate;
+  const shipping = useMemo(() => {
+    if (delivery === "pickup" || subtotal === 0) return 0;
+    return (subtotal - discount) >= threshold ? 0 : flat;
+  }, [delivery, subtotal, discount, threshold, flat]);
+
   const total = Math.max(0, subtotal - discount + shipping);
 
-  const onSubmit = (v: FormValues) => {
+  const applyCoupon = async () => {
+    setCouponMsg(null);
+    if (!couponCode?.trim()) {
+      setDiscount(0);
+      setAppliedCode(undefined);
+      return;
+    }
+    const c = await fetchActiveCoupon(couponCode);
+    if (!c) {
+      setDiscount(0);
+      setAppliedCode(undefined);
+      setCouponMsg("That coupon isn't valid.");
+      return;
+    }
+    const d = c.type === "percent" ? Math.round((subtotal * c.value) / 100) : Math.min(c.value, subtotal);
+    setDiscount(d);
+    setAppliedCode(c.code);
+  };
+
+  const onSubmit = async (v: FormValues) => {
     if (items.length === 0) {
       toast({ title: "Your cart is empty" });
       return;
     }
-    if (couponCode && !appliedCode) {
-      setCouponMsg("That coupon isn't valid.");
-      return;
+    setSubmitting(true);
+    try {
+      const orderItems = items.map((it) => {
+        const p = productsById.get(it.productId);
+        const variant = p?.variants.find((x) => x.weight === it.weight);
+        return {
+          product_id: it.productId,
+          product_name: p?.name ?? "Unknown",
+          weight: it.weight,
+          qty: it.qty,
+          unit_price: variant?.price_npr ?? 0,
+        };
+      });
+
+      const { data: orderRow, error: orderErr } = await supabase
+        .from("orders")
+        .insert({
+          customer_name: v.name,
+          customer_phone: v.phone,
+          customer_address: v.address,
+          delivery: v.delivery,
+          payment: v.payment,
+          notes: v.notes || null,
+          subtotal,
+          shipping,
+          discount,
+          coupon_code: appliedCode ?? null,
+          total,
+        })
+        .select("id")
+        .single();
+      if (orderErr) throw orderErr;
+      const orderId = orderRow.id;
+
+      const { error: itemsErr } = await supabase.from("order_items").insert(
+        orderItems.map((i) => ({ ...i, order_id: orderId }))
+      );
+      if (itemsErr) throw itemsErr;
+
+      // Fire-and-forget email notification
+      supabase.functions.invoke("send-order-notification", { body: { orderId } }).catch(() => {});
+
+      // Open WhatsApp with summary
+      if (settings?.whatsapp_number) {
+        const text = orderToWhatsappText({
+          id: orderId.slice(0, 8).toUpperCase(),
+          customer: { name: v.name, phone: v.phone, address: v.address },
+          delivery: v.delivery,
+          payment: v.payment,
+          items: orderItems.map((i) => ({ name: i.product_name, weight: i.weight, qty: i.qty, unitPrice: i.unit_price })),
+          subtotal, shipping, discount, couponCode: appliedCode, total,
+        });
+        window.open(whatsappLink(text, settings.whatsapp_number), "_blank", "noopener");
+      }
+
+      clear();
+      navigate(`/order/${orderId}`);
+    } catch (e: any) {
+      console.error(e);
+      toast({ title: "Could not place order", description: e?.message ?? "Please try again", variant: "destructive" });
+    } finally {
+      setSubmitting(false);
     }
-
-    const id = `MAS-${Date.now().toString(36).toUpperCase()}`;
-    const orderItems = items.map((it) => {
-      const p = getProduct(it.slug)!;
-      return { slug: it.slug, name: p.name, variant: it.variant, qty: it.qty, unitPrice: p.prices[it.variant] };
-    });
-
-    const order: Order = {
-      id, createdAt: Date.now(),
-      customer: { name: v.name, phone: v.phone, address: v.address },
-      delivery: v.delivery, payment: v.payment,
-      items: orderItems,
-      subtotal, shipping, discount,
-      couponCode: appliedCode,
-      total, status: "new",
-    };
-    saveOrder(order);
-
-    // decrement local stock
-    const updated = getProducts().map((p) => {
-      const next = { ...p, stock: { ...p.stock } };
-      for (const it of items) if (it.slug === p.slug) next.stock[it.variant] = Math.max(0, next.stock[it.variant] - it.qty);
-      return next;
-    });
-    saveProducts(updated);
-
-    // open whatsapp
-    window.open(whatsappLink(orderToWhatsappText(order)), "_blank", "noopener");
-    clear();
-    navigate(`/order/${id}`);
   };
 
   return (
@@ -120,8 +169,8 @@ export default function Checkout() {
 
             <Card title="Delivery">
               <div className="grid gap-3 sm:grid-cols-2">
-                <Radio label="Home delivery" sub={`${formatNPR(settings.shippingFlatRate)} · free over ${formatNPR(settings.freeShippingThreshold)}`} {...register("delivery")} value="delivery" />
-                <Radio label="Local pickup" sub={settings.pickupAddress} {...register("delivery")} value="pickup" />
+                <Radio label="Home delivery" sub={`${formatNPR(flat)} · free over ${formatNPR(threshold)}`} {...register("delivery")} value="delivery" />
+                <Radio label="Local pickup" sub={settings?.pickup_address ?? "Roastery pickup"} {...register("delivery")} value="pickup" />
               </div>
             </Card>
 
@@ -130,15 +179,22 @@ export default function Checkout() {
                 <Radio label="Cash on Delivery" sub="Pay when your order arrives" {...register("payment")} value="cod" />
                 <Radio label="Bank Transfer" sub="Manual transfer instructions" {...register("payment")} value="bank" />
               </div>
-              {payment === "bank" && (
-                <pre className="mt-4 whitespace-pre-wrap rounded-md bg-secondary p-4 text-xs text-secondary-foreground">{settings.bankDetails}</pre>
+              {payment === "bank" && settings?.bank_details && (
+                <pre className="mt-4 whitespace-pre-wrap rounded-md bg-secondary p-4 text-xs text-secondary-foreground">{settings.bank_details}</pre>
               )}
             </Card>
 
             <Card title="Coupon (optional)">
-              <Input placeholder="e.g. WELCOME10" {...register("coupon")} />
+              <div className="flex gap-2">
+                <Input placeholder="e.g. WELCOME10" {...register("coupon")} />
+                <Button type="button" variant="outline" onClick={applyCoupon}>Apply</Button>
+              </div>
               {appliedCode && <p className="mt-2 text-xs text-accent">Applied: {appliedCode} (−{formatNPR(discount)})</p>}
               {couponMsg && !appliedCode && <p className="mt-2 text-xs text-destructive">{couponMsg}</p>}
+            </Card>
+
+            <Card title="Order notes (optional)">
+              <Textarea rows={2} {...register("notes")} placeholder="Anything we should know?" />
             </Card>
           </div>
 
@@ -146,12 +202,13 @@ export default function Checkout() {
             <h2 className="font-serif text-xl text-espresso">Summary</h2>
             <ul className="mt-4 space-y-2 text-sm">
               {items.map((it) => {
-                const p = getProduct(it.slug);
-                if (!p) return null;
+                const p = productsById.get(it.productId);
+                const variant = p?.variants.find((x) => x.weight === it.weight);
+                if (!p || !variant) return null;
                 return (
-                  <li key={`${it.slug}-${it.variant}`} className="flex justify-between gap-2">
-                    <span className="text-muted-foreground">{p.name} <span className="text-xs">({it.variant}) × {it.qty}</span></span>
-                    <span>{formatNPR(p.prices[it.variant] * it.qty)}</span>
+                  <li key={`${it.productId}-${it.weight}`} className="flex justify-between gap-2">
+                    <span className="text-muted-foreground">{p.name} <span className="text-xs">({it.weight}) × {it.qty}</span></span>
+                    <span>{formatNPR(variant.price_npr * it.qty)}</span>
                   </li>
                 );
               })}
@@ -162,10 +219,10 @@ export default function Checkout() {
               <div className="flex justify-between"><dt className="text-muted-foreground">Shipping</dt><dd>{shipping === 0 ? "Free" : formatNPR(shipping)}</dd></div>
               <div className="flex justify-between border-t border-border pt-2 text-base font-medium"><dt>Total</dt><dd>{formatNPR(total)}</dd></div>
             </dl>
-            <Button type="submit" size="lg" className="mt-6 w-full bg-espresso text-cream hover:bg-espresso/90" disabled={isSubmitting || items.length === 0}>
-              <MessageCircle className="mr-2 h-4 w-4" /> Place order
+            <Button type="submit" size="lg" className="mt-6 w-full bg-espresso text-cream hover:bg-espresso/90" disabled={submitting || items.length === 0}>
+              <MessageCircle className="mr-2 h-4 w-4" /> {submitting ? "Placing…" : "Place order"}
             </Button>
-            <p className="mt-3 text-center text-xs text-muted-foreground">We'll open WhatsApp with your order to confirm.</p>
+            <p className="mt-3 text-center text-xs text-muted-foreground">We'll open WhatsApp to confirm your order.</p>
           </aside>
         </form>
       </section>

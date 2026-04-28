@@ -1,23 +1,25 @@
 import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import ProductCard from "@/components/ProductCard";
-import { getProducts } from "@/lib/store";
+import WhatsAppFloat from "@/components/WhatsAppFloat";
 import { Button } from "@/components/ui/button";
+import { fetchProducts } from "@/lib/api";
 
 const ROASTS = ["Light", "Medium", "Medium-Dark", "Dark"] as const;
 const PROCESSES = ["Washed", "Natural"] as const;
 
 export default function Shop() {
-  const all = getProducts().filter((p) => p.active);
+  const { data: products = [], isLoading } = useQuery({ queryKey: ["products"], queryFn: fetchProducts });
   const [roast, setRoast] = useState<string | null>(null);
   const [proc, setProc] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
-    return all.filter((p) =>
-      (!roast || p.roast === roast) && (!proc || p.process === proc)
-    );
-  }, [all, roast, proc]);
+    return products
+      .filter((p) => p.active)
+      .filter((p) => (!roast || p.roast === roast) && (!proc || p.process === proc));
+  }, [products, roast, proc]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -42,14 +44,21 @@ export default function Shop() {
           ))}
         </div>
 
-        <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.map((p) => <ProductCard key={p.slug} product={p} />)}
-        </div>
-        {filtered.length === 0 && (
-          <p className="mt-12 text-center text-muted-foreground">No coffees match those filters.</p>
+        {isLoading ? (
+          <p className="mt-12 text-center text-muted-foreground">Loading…</p>
+        ) : (
+          <>
+            <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {filtered.map((p) => <ProductCard key={p.id} product={p} />)}
+            </div>
+            {filtered.length === 0 && (
+              <p className="mt-12 text-center text-muted-foreground">No coffees match those filters.</p>
+            )}
+          </>
         )}
       </section>
       <Footer />
+      <WhatsAppFloat />
     </div>
   );
 }
