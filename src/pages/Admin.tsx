@@ -171,7 +171,7 @@ function InquiriesTab() {
               <div className="mt-2 text-xs text-muted-foreground">{new Date(i.created_at).toLocaleString()}</div>
             </div>
             <div className="flex flex-col gap-2">
-              {["new", "contacted", "closed"].map((s) => (
+              {(["new", "contacted", "closed"] as const).map((s) => (
                 <Button key={s} size="sm" variant={i.status === s ? "default" : "outline"} onClick={() => setStatus(i.id, s)}>{s}</Button>
               ))}
             </div>
