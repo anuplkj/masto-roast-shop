@@ -85,7 +85,7 @@ function OrdersTab() {
     },
   });
 
-  const setStatus = async (id: string, status: string) => {
+  const setStatus = async (id: string, status: "new" | "confirmed" | "fulfilled" | "cancelled") => {
     await supabase.from("orders").update({ status }).eq("id", id);
     qc.invalidateQueries({ queryKey: ["admin-orders"] });
   };
