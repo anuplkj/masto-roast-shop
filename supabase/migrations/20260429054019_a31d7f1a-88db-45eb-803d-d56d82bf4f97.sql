@@ -1,0 +1,1 @@
+UPDATE public.settings SET whatsapp_number = '9779849100689', contact_phone = '+977-9849100689' WHERE id = 1;
