@@ -151,7 +151,7 @@ function InquiriesTab() {
     },
   });
 
-  const setStatus = async (id: string, status: string) => {
+  const setStatus = async (id: string, status: "new" | "contacted" | "closed") => {
     await supabase.from("wholesale_inquiries").update({ status }).eq("id", id);
     qc.invalidateQueries({ queryKey: ["admin-inquiries"] });
   };
