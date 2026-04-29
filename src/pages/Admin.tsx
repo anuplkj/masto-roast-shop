@@ -85,7 +85,7 @@ function OrdersTab() {
     },
   });
 
-  const setStatus = async (id: string, status: string) => {
+  const setStatus = async (id: string, status: "new" | "confirmed" | "fulfilled" | "cancelled") => {
     await supabase.from("orders").update({ status }).eq("id", id);
     qc.invalidateQueries({ queryKey: ["admin-orders"] });
   };
@@ -130,7 +130,7 @@ function OrdersTab() {
             </div>
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
-            {["new", "confirmed", "fulfilled", "cancelled"].map((s) => (
+            {(["new", "confirmed", "fulfilled", "cancelled"] as const).map((s) => (
               <Button key={s} size="sm" variant={o.status === s ? "default" : "outline"} onClick={() => setStatus(o.id, s)}>{s}</Button>
             ))}
           </div>
@@ -151,7 +151,7 @@ function InquiriesTab() {
     },
   });
 
-  const setStatus = async (id: string, status: string) => {
+  const setStatus = async (id: string, status: "new" | "contacted" | "closed") => {
     await supabase.from("wholesale_inquiries").update({ status }).eq("id", id);
     qc.invalidateQueries({ queryKey: ["admin-inquiries"] });
   };
@@ -171,7 +171,7 @@ function InquiriesTab() {
               <div className="mt-2 text-xs text-muted-foreground">{new Date(i.created_at).toLocaleString()}</div>
             </div>
             <div className="flex flex-col gap-2">
-              {["new", "contacted", "closed"].map((s) => (
+              {(["new", "contacted", "closed"] as const).map((s) => (
                 <Button key={s} size="sm" variant={i.status === s ? "default" : "outline"} onClick={() => setStatus(i.id, s)}>{s}</Button>
               ))}
             </div>
