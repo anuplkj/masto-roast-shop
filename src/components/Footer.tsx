@@ -12,17 +12,34 @@ export default function Footer() {
           <p className="mt-2 max-w-xs text-sm text-muted-foreground">
             Small-batch specialty coffee, roasted to order in Nepal.
           </p>
-          <div className="mt-4 flex items-center gap-3">
-            {s?.instagram_url && (
-              <a href={s.instagram_url} target="_blank" rel="noopener" aria-label="Instagram" className="text-muted-foreground hover:text-accent">
-                <Instagram className="h-5 w-5" />
-              </a>
-            )}
-            {s?.facebook_url && (
-              <a href={s.facebook_url} target="_blank" rel="noopener" aria-label="Facebook" className="text-muted-foreground hover:text-accent">
-                <Facebook className="h-5 w-5" />
-              </a>
-            )}
+          <div className="mt-5">
+            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Follow us</div>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              {s?.instagram_url && (
+                <a
+                  href={s.instagram_url}
+                  target="_blank"
+                  rel="noopener"
+                  aria-label="Instagram"
+                  className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-card px-3 py-1.5 text-sm text-espresso transition-colors hover:border-accent hover:text-accent"
+                >
+                  <Instagram className="h-4 w-4" />
+                  Instagram
+                </a>
+              )}
+              {s?.facebook_url && (
+                <a
+                  href={s.facebook_url}
+                  target="_blank"
+                  rel="noopener"
+                  aria-label="Facebook"
+                  className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-card px-3 py-1.5 text-sm text-espresso transition-colors hover:border-accent hover:text-accent"
+                >
+                  <Facebook className="h-4 w-4" />
+                  Facebook
+                </a>
+              )}
+            </div>
           </div>
         </div>
         <div>
