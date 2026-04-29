@@ -130,7 +130,7 @@ function OrdersTab() {
             </div>
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
-            {["new", "confirmed", "fulfilled", "cancelled"].map((s) => (
+            {(["new", "confirmed", "fulfilled", "cancelled"] as const).map((s) => (
               <Button key={s} size="sm" variant={o.status === s ? "default" : "outline"} onClick={() => setStatus(o.id, s)}>{s}</Button>
             ))}
           </div>
