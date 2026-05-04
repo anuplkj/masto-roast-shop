@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import WhatsAppFloat from "@/components/WhatsAppFloat";
+import SEO from "@/components/SEO";
 import { fetchGallery } from "@/lib/api";
 
 export default function Story() {
@@ -9,6 +10,11 @@ export default function Story() {
 
   return (
     <div className="min-h-screen bg-background">
+      <SEO
+        title="Our Story — Artisan Coffee Roasting in Nepal"
+        description="The story of Masto Artisan Roastery — manual small-batch roasting, direct relationships with Nepali farmers in Ilam, Gulmi, Kaski and Sindhuli, and the craft behind every bag."
+        canonical="/story"
+      />
       <Header />
       <section className="bg-beige/40 py-16 md:py-24">
         <div className="container max-w-3xl">
