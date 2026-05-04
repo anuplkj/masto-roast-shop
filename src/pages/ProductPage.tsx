@@ -171,6 +171,9 @@ export default function ProductPage() {
           <div className="mt-10 grid gap-6 border-t border-border/60 pt-8 sm:grid-cols-2">
             {product.roast && <DetailBlock title="Roast">{product.roast}</DetailBlock>}
             {product.process && <DetailBlock title="Process">{product.process}</DetailBlock>}
+            {product.elevation_m && <DetailBlock title="Elevation">{product.elevation_m.toLocaleString()} m</DetailBlock>}
+            {product.variety && <DetailBlock title="Variety">{product.variety}</DetailBlock>}
+            {product.harvest_year && <DetailBlock title="Harvest year">{product.harvest_year}</DetailBlock>}
             {product.flavor_notes.length > 0 && <DetailBlock title="Flavor notes">{product.flavor_notes.join(" · ")}</DetailBlock>}
             {product.brew_recommendations.length > 0 && <DetailBlock title="Brew recommendations">{product.brew_recommendations.join(", ")}</DetailBlock>}
           </div>
@@ -178,6 +181,16 @@ export default function ProductPage() {
           {product.description && <p className="mt-8 text-foreground/75">{product.description}</p>}
         </div>
       </section>
+
+      {related.length > 0 && (
+        <section className="container border-t border-border/60 py-16">
+          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-accent">Pairs well with</div>
+          <h2 className="mt-2 font-serif text-3xl text-espresso">You may also like</h2>
+          <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {related.map((p) => <ProductCard key={p.id} product={p} />)}
+          </div>
+        </section>
+      )}
 
       <Footer />
       <WhatsAppFloat />
