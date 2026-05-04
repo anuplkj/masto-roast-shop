@@ -1,23 +1,49 @@
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Coffee, Flame, Leaf, Phone, MessageCircle, MapPin, Mail, ArrowRight } from "lucide-react";
+import { Coffee, Flame, Leaf, Phone, MessageCircle, MapPin, Mail, ArrowRight, Quote, Sprout, Mountain } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import ProductCard from "@/components/ProductCard";
 import WhatsAppFloat from "@/components/WhatsAppFloat";
-import { fetchProducts } from "@/lib/api";
+import SEO from "@/components/SEO";
+import { fetchProducts, fetchTestimonials } from "@/lib/api";
 import { useSettings } from "@/hooks/useSettings";
 import { whatsappLink } from "@/lib/whatsapp";
 
 export default function Index() {
   const { data: settings } = useSettings();
   const { data: products = [] } = useQuery({ queryKey: ["products"], queryFn: fetchProducts });
+  const { data: testimonials = [] } = useQuery({ queryKey: ["testimonials"], queryFn: fetchTestimonials });
   const featured = products.filter((p) => p.featured && p.active).slice(0, 6);
   const wa = settings?.whatsapp_number ?? "";
 
+  const quotes = testimonials.filter((t) => t.kind === "testimonial");
+  const logos = testimonials.filter((t) => t.kind === "logo" && t.logo_url);
+
+  const orgJsonLd = {
+    "@context": "https://schema.org",
+    "@type": ["Organization", "LocalBusiness"],
+    name: settings?.brand_name ?? "Masto Artisan Roastery",
+    description: "Artisan specialty coffee roastery in Nepal. Small-batch, single-origin Himalayan beans roasted in Kathmandu.",
+    url: typeof window !== "undefined" ? window.location.origin : "",
+    logo: settings?.logo_url ?? undefined,
+    email: settings?.contact_email,
+    telephone: settings?.contact_phone ?? undefined,
+    address: settings?.pickup_address
+      ? { "@type": "PostalAddress", streetAddress: settings.pickup_address, addressCountry: "NP" }
+      : { "@type": "PostalAddress", addressCountry: "NP" },
+    sameAs: [settings?.instagram_url, settings?.facebook_url].filter(Boolean),
+  };
+
   return (
     <div className="min-h-screen bg-background">
+      <SEO
+        title="Artisan Coffee Roastery in Nepal — Specialty Himalayan Coffee"
+        description="Small-batch specialty coffee from Nepal's highlands. Ethically sourced single-origin beans, roasted in Kathmandu. Roasted with tradition, crafted for taste."
+        canonical="/"
+        jsonLd={orgJsonLd}
+      />
       <Header />
 
       {/* Hero */}
