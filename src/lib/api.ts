@@ -26,7 +26,22 @@ export interface Product {
   active: boolean;
   featured: boolean;
   sort_order: number;
+  elevation_m: number | null;
+  variety: string | null;
+  harvest_year: number | null;
+  seo_description: string | null;
   variants: ProductVariant[];
+}
+
+export interface Testimonial {
+  id: string;
+  kind: "testimonial" | "logo";
+  author: string | null;
+  role: string | null;
+  quote: string | null;
+  logo_url: string | null;
+  sort_order: number;
+  active: boolean;
 }
 
 export interface Settings {
@@ -134,6 +149,17 @@ export async function fetchActiveCoupon(code: string): Promise<Coupon | null> {
     .maybeSingle();
   if (error) throw error;
   return data as Coupon | null;
+}
+
+// Testimonials
+export async function fetchTestimonials(): Promise<Testimonial[]> {
+  const { data, error } = await (supabase as any)
+    .from("testimonials")
+    .select("*")
+    .eq("active", true)
+    .order("sort_order", { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as Testimonial[];
 }
 
 // Format helpers
