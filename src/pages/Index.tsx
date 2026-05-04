@@ -55,14 +55,17 @@ export default function Index() {
               <span className="h-1.5 w-1.5 rounded-full bg-terracotta" /> Roasted in Nepal
             </div>
             <h1 className="mt-6 font-serif text-5xl leading-[1.05] text-cream md:text-6xl lg:text-7xl">
-              {settings?.brand_name ?? "Masto Artisan Roastery"}
+              Artisan Coffee Roastery in Nepal
             </h1>
+            <p className="mt-4 text-base uppercase tracking-[0.18em] text-cream/70">
+              Specialty Himalayan Coffee · Roasted with Tradition, Crafted for Taste
+            </p>
             <p className="mt-5 max-w-md text-lg text-cream/75">
-              Roasted with tradition, crafted for taste. Small-batch specialty coffee from the highlands of Nepal.
+              Small-batch single-origin coffee from the highlands of Nepal — ethically sourced and freshly roasted in Kathmandu.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Button asChild size="lg" className="bg-cream text-espresso hover:bg-cream/90">
-                <Link to="/shop">Shop Coffee <ArrowRight className="ml-2 h-4 w-4" /></Link>
+                <Link to="/shop">Experience the Roast <ArrowRight className="ml-2 h-4 w-4" /></Link>
               </Button>
               <Button asChild size="lg" variant="outline" className="border-cream/30 bg-transparent text-cream hover:bg-cream/10 hover:text-cream">
                 <Link to="/story">Our story</Link>
@@ -121,13 +124,17 @@ export default function Index() {
         </div>
       </section>
 
-      {/* Freshness */}
+      {/* Value Propositions */}
       <section className="container py-20">
+        <div className="mx-auto mb-12 max-w-2xl text-center">
+          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-accent">Why Masto</div>
+          <h2 className="mt-2 font-serif text-4xl text-espresso">Coffee with a story behind every cup</h2>
+        </div>
         <div className="grid gap-6 md:grid-cols-3">
           {[
-            { icon: Flame, title: "Roasted to order", body: "We roast after you order, never before. Coffee leaves our roastery within 48 hours." },
-            { icon: Leaf, title: "Single-origin sourcing", body: "Direct relationships with Nepali farmers — traceable lots, fair prices, premium quality." },
-            { icon: Coffee, title: "Cupped & approved", body: "Every batch is tasted by our team before it ships. If we wouldn't drink it, you won't either." },
+            { icon: Sprout, title: "Ethical Direct Sourcing", body: "We buy beans straight from Nepali farmers in Ilam, Gulmi, Kaski and Sindhuli — premium prices, traceable lots, lasting partnerships." },
+            { icon: Flame, title: "Small-Batch Artisan Roasting", body: "Every roast is hand-monitored on a small drum roaster, profiled by sense, and cupped before it leaves the door." },
+            { icon: Mountain, title: "Freshly Roasted in Kathmandu", body: "Roasted to order in our Kathmandu Valley roastery and shipped within 48 hours so the cup is always alive." },
           ].map(({ icon: Icon, title, body }) => (
             <div key={title} className="rounded-xl border border-border/60 bg-card p-7 shadow-card">
               <Icon className="h-8 w-8 text-accent" strokeWidth={1.5} />
@@ -137,6 +144,42 @@ export default function Index() {
           ))}
         </div>
       </section>
+
+      {/* Social Proof */}
+      {(quotes.length > 0 || logos.length > 0) && (
+        <section className="bg-beige/30 py-20">
+          <div className="container">
+            <div className="mx-auto max-w-2xl text-center">
+              <div className="text-xs font-semibold uppercase tracking-[0.2em] text-accent">Loved by</div>
+              <h2 className="mt-2 font-serif text-4xl text-espresso">Trusted by drinkers & cafés</h2>
+            </div>
+            {quotes.length > 0 && (
+              <div className="mt-12 grid gap-6 md:grid-cols-3">
+                {quotes.slice(0, 3).map((t) => (
+                  <figure key={t.id} className="rounded-xl border border-border/60 bg-card p-7 shadow-card">
+                    <Quote className="h-6 w-6 text-accent/70" />
+                    <blockquote className="mt-4 text-foreground/85">"{t.quote}"</blockquote>
+                    <figcaption className="mt-4 text-sm">
+                      <span className="font-medium text-espresso">{t.author}</span>
+                      {t.role && <span className="text-muted-foreground"> · {t.role}</span>}
+                    </figcaption>
+                  </figure>
+                ))}
+              </div>
+            )}
+            {logos.length > 0 && (
+              <div className="mt-12">
+                <div className="text-center text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">As served in</div>
+                <div className="mt-6 flex flex-wrap items-center justify-center gap-8 opacity-80">
+                  {logos.map((l) => (
+                    <img key={l.id} src={l.logo_url!} alt={l.author ?? "Partner cafe"} loading="lazy" className="h-10 w-auto object-contain grayscale transition hover:grayscale-0" />
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
 
       {/* Wholesale CTA */}
       <section className="bg-espresso py-20 text-cream">
