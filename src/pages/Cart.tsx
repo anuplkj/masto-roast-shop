@@ -20,6 +20,7 @@ export default function Cart() {
 
   return (
     <div className="min-h-screen bg-background">
+      <SEO title="Your Cart" description="Review your Masto coffee selection before checkout." canonical="/cart" noindex />
       <Header />
       <section className="container py-12">
         <h1 className="font-serif text-4xl text-espresso">Your cart</h1>
