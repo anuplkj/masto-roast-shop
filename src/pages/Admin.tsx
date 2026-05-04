@@ -563,3 +563,133 @@ function SettingsTab() {
     </div>
   );
 }
+
+// ============ TESTIMONIALS ============
+function TestimonialsTab() {
+  const qc = useQueryClient();
+  const { data: items = [] } = useQuery({
+    queryKey: ["admin-testimonials"],
+    queryFn: async () => {
+      const { data } = await (supabase as any).from("testimonials").select("*").order("sort_order").order("created_at", { ascending: false });
+      return (data ?? []) as any[];
+    },
+  });
+  const [creating, setCreating] = useState(false);
+  const [draft, setDraft] = useState<any>({ kind: "testimonial", author: "", role: "", quote: "", logo_url: "", sort_order: 0, active: true });
+  const refresh = () => { qc.invalidateQueries({ queryKey: ["admin-testimonials"] }); qc.invalidateQueries({ queryKey: ["testimonials"] }); };
+
+  const create = async () => {
+    const payload: any = { ...draft };
+    if (!payload.author) payload.author = null;
+    if (!payload.role) payload.role = null;
+    if (!payload.quote) payload.quote = null;
+    if (!payload.logo_url) payload.logo_url = null;
+    const { error } = await (supabase as any).from("testimonials").insert(payload);
+    if (error) { toast({ title: "Failed", description: error.message, variant: "destructive" }); return; }
+    setCreating(false);
+    setDraft({ kind: "testimonial", author: "", role: "", quote: "", logo_url: "", sort_order: 0, active: true });
+    refresh();
+  };
+
+  const onLogoUpload = async (file: File, id?: string) => {
+    try {
+      const url = await uploadImage("branding", file, `testimonial-${Date.now()}`);
+      if (id) {
+        await (supabase as any).from("testimonials").update({ logo_url: url }).eq("id", id);
+      } else {
+        setDraft({ ...draft, logo_url: url });
+      }
+      refresh();
+      toast({ title: "Logo uploaded" });
+    } catch (e: any) {
+      toast({ title: "Upload failed", description: e?.message, variant: "destructive" });
+    }
+  };
+
+  const remove = async (id: string) => {
+    await (supabase as any).from("testimonials").delete().eq("id", id);
+    refresh();
+  };
+  const toggleActive = async (id: string, active: boolean) => {
+    await (supabase as any).from("testimonials").update({ active }).eq("id", id);
+    refresh();
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-end">
+        <Button onClick={() => setCreating(true)} className="bg-espresso text-cream hover:bg-espresso/90">
+          <Plus className="mr-2 h-4 w-4" /> Add testimonial / logo
+        </Button>
+      </div>
+      {creating && (
+        <div className="rounded-lg border border-dashed border-border bg-background p-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <Label>Type</Label>
+              <select value={draft.kind} onChange={(e) => setDraft({ ...draft, kind: e.target.value })} className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
+                <option value="testimonial">Customer testimonial</option>
+                <option value="logo">Cafe / partner logo</option>
+              </select>
+            </div>
+            <div><Label>Sort order</Label><Input type="number" value={draft.sort_order} onChange={(e) => setDraft({ ...draft, sort_order: Number(e.target.value) || 0 })} className="mt-1" /></div>
+            {draft.kind === "testimonial" ? (
+              <>
+                <div><Label>Author</Label><Input value={draft.author} onChange={(e) => setDraft({ ...draft, author: e.target.value })} className="mt-1" /></div>
+                <div><Label>Role / location</Label><Input value={draft.role} onChange={(e) => setDraft({ ...draft, role: e.target.value })} className="mt-1" /></div>
+                <div className="sm:col-span-2"><Label>Quote</Label><Textarea rows={3} value={draft.quote} onChange={(e) => setDraft({ ...draft, quote: e.target.value })} className="mt-1" /></div>
+              </>
+            ) : (
+              <>
+                <div className="sm:col-span-2"><Label>Cafe / partner name</Label><Input value={draft.author} onChange={(e) => setDraft({ ...draft, author: e.target.value })} className="mt-1" /></div>
+                <div className="sm:col-span-2">
+                  <Label>Logo</Label>
+                  <div className="mt-1 flex items-center gap-3">
+                    {draft.logo_url && <img src={draft.logo_url} alt="" className="h-12 w-auto object-contain" />}
+                    <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm hover:bg-secondary">
+                      <Upload className="h-4 w-4" /> Upload
+                      <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && onLogoUpload(e.target.files[0])} />
+                    </label>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+          <div className="mt-4 flex gap-2">
+            <Button onClick={create} className="bg-espresso text-cream hover:bg-espresso/90">Create</Button>
+            <Button variant="outline" onClick={() => setCreating(false)}>Cancel</Button>
+          </div>
+        </div>
+      )}
+      {items.length === 0 && !creating && <p className="text-muted-foreground">No testimonials yet.</p>}
+      <div className="grid gap-3 md:grid-cols-2">
+        {items.map((t: any) => (
+          <div key={t.id} className="rounded-lg border border-border bg-background p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <div className="text-xs uppercase tracking-wider text-muted-foreground">{t.kind}</div>
+                {t.kind === "testimonial" ? (
+                  <>
+                    <p className="mt-1 italic">"{t.quote}"</p>
+                    <p className="mt-2 text-sm">— {t.author}{t.role ? `, ${t.role}` : ""}</p>
+                  </>
+                ) : (
+                  <div className="mt-2 flex items-center gap-3">
+                    {t.logo_url && <img src={t.logo_url} alt={t.author ?? ""} className="h-10 w-auto object-contain" />}
+                    <span className="text-sm">{t.author}</span>
+                  </div>
+                )}
+              </div>
+              <div className="flex flex-col gap-2">
+                <Button size="sm" variant={t.active ? "default" : "outline"} onClick={() => toggleActive(t.id, !t.active)}>
+                  {t.active ? "Active" : "Hidden"}
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => remove(t.id)}><Trash2 className="h-4 w-4" /></Button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
