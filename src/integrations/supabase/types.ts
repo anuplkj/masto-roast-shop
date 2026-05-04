@@ -192,54 +192,66 @@ export type Database = {
           brew_recommendations: string[]
           created_at: string
           description: string | null
+          elevation_m: number | null
           featured: boolean
           flavor_notes: string[]
+          harvest_year: number | null
           id: string
           image_url: string | null
           name: string
           origin: string | null
           process: string | null
           roast: string | null
+          seo_description: string | null
           short_note: string | null
           slug: string
           sort_order: number
           updated_at: string
+          variety: string | null
         }
         Insert: {
           active?: boolean
           brew_recommendations?: string[]
           created_at?: string
           description?: string | null
+          elevation_m?: number | null
           featured?: boolean
           flavor_notes?: string[]
+          harvest_year?: number | null
           id?: string
           image_url?: string | null
           name: string
           origin?: string | null
           process?: string | null
           roast?: string | null
+          seo_description?: string | null
           short_note?: string | null
           slug: string
           sort_order?: number
           updated_at?: string
+          variety?: string | null
         }
         Update: {
           active?: boolean
           brew_recommendations?: string[]
           created_at?: string
           description?: string | null
+          elevation_m?: number | null
           featured?: boolean
           flavor_notes?: string[]
+          harvest_year?: number | null
           id?: string
           image_url?: string | null
           name?: string
           origin?: string | null
           process?: string | null
           roast?: string | null
+          seo_description?: string | null
           short_note?: string | null
           slug?: string
           sort_order?: number
           updated_at?: string
+          variety?: string | null
         }
         Relationships: []
       }
@@ -312,6 +324,42 @@ export type Database = {
           updated_at?: string
           whatsapp_number?: string
           wholesale_whatsapp?: string | null
+        }
+        Relationships: []
+      }
+      testimonials: {
+        Row: {
+          active: boolean
+          author: string | null
+          created_at: string
+          id: string
+          kind: string
+          logo_url: string | null
+          quote: string | null
+          role: string | null
+          sort_order: number
+        }
+        Insert: {
+          active?: boolean
+          author?: string | null
+          created_at?: string
+          id?: string
+          kind?: string
+          logo_url?: string | null
+          quote?: string | null
+          role?: string | null
+          sort_order?: number
+        }
+        Update: {
+          active?: boolean
+          author?: string | null
+          created_at?: string
+          id?: string
+          kind?: string
+          logo_url?: string | null
+          quote?: string | null
+          role?: string | null
+          sort_order?: number
         }
         Relationships: []
       }

@@ -6,6 +6,7 @@ import { MessageCircle } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import WhatsAppFloat from "@/components/WhatsAppFloat";
+import SEO from "@/components/SEO";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -53,6 +54,11 @@ export default function Wholesale() {
 
   return (
     <div className="min-h-screen bg-background">
+      <SEO
+        title="Wholesale Coffee Supplier in Nepal — Cafés & Restaurants"
+        description="Reliable wholesale specialty coffee for cafés, restaurants & offices in Nepal. Bespoke blends, barista training, weekly delivery from Masto Artisan Roastery."
+        canonical="/wholesale"
+      />
       <Header />
       <section className="bg-espresso py-16 text-cream md:py-24">
         <div className="container">

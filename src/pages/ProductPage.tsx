@@ -1,13 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Minus, Plus, ShoppingBag, ArrowLeft } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import ProductImage from "@/components/ProductImage";
+import ProductCard from "@/components/ProductCard";
 import WhatsAppFloat from "@/components/WhatsAppFloat";
+import SEO from "@/components/SEO";
 import { Button } from "@/components/ui/button";
-import { fetchProductBySlug, formatNPR, type Weight } from "@/lib/api";
+import { fetchProductBySlug, fetchProducts, formatNPR, type Weight } from "@/lib/api";
 import { useCart } from "@/context/CartContext";
 import { toast } from "@/hooks/use-toast";
 
@@ -18,6 +20,7 @@ export default function ProductPage() {
     queryFn: () => fetchProductBySlug(slug!),
     enabled: !!slug,
   });
+  const { data: allProducts = [] } = useQuery({ queryKey: ["products"], queryFn: fetchProducts });
   const { add } = useCart();
   const [weight, setWeight] = useState<Weight>("250g");
   const [qty, setQty] = useState(1);
@@ -28,6 +31,11 @@ export default function ProductPage() {
       setWeight((inStock ?? product.variants[0]).weight);
     }
   }, [product]);
+
+  const related = useMemo(() => {
+    if (!product) return [];
+    return allProducts.filter((p) => p.active && p.id !== product.id).slice(0, 3);
+  }, [allProducts, product]);
 
   if (isLoading) {
     return (
@@ -62,8 +70,48 @@ export default function ProductPage() {
     toast({ title: "Added to cart", description: `${product.name} (${variant.weight}) × ${qty}` });
   };
 
+  const seoDesc =
+    product.seo_description ||
+    product.description ||
+    `${product.name} — ${product.short_note || "Specialty single-origin Nepali coffee, freshly roasted in Kathmandu."}`;
+  const productJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    name: product.name,
+    description: seoDesc,
+    image: product.image_url ? [product.image_url] : undefined,
+    brand: { "@type": "Brand", name: "Masto Artisan Roastery" },
+    category: "Coffee",
+    offers: product.variants.map((v) => ({
+      "@type": "Offer",
+      sku: v.id,
+      name: `${product.name} — ${v.weight}`,
+      price: v.price_npr,
+      priceCurrency: "NPR",
+      availability: v.stock > 0 ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
+      url: typeof window !== "undefined" ? window.location.href : "",
+    })),
+  };
+  const breadcrumbJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: typeof window !== "undefined" ? window.location.origin : "" },
+      { "@type": "ListItem", position: 2, name: "Shop", item: typeof window !== "undefined" ? `${window.location.origin}/shop` : "" },
+      { "@type": "ListItem", position: 3, name: product.name },
+    ],
+  };
+
   return (
     <div className="min-h-screen bg-background">
+      <SEO
+        title={`${product.name} — Single-Origin Nepali Coffee`}
+        description={seoDesc}
+        canonical={`/product/${product.slug}`}
+        image={product.image_url ?? undefined}
+        type="product"
+        jsonLd={[productJsonLd, breadcrumbJsonLd]}
+      />
       <Header />
       <div className="container py-8">
         <Link to="/shop" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
@@ -123,6 +171,9 @@ export default function ProductPage() {
           <div className="mt-10 grid gap-6 border-t border-border/60 pt-8 sm:grid-cols-2">
             {product.roast && <DetailBlock title="Roast">{product.roast}</DetailBlock>}
             {product.process && <DetailBlock title="Process">{product.process}</DetailBlock>}
+            {product.elevation_m && <DetailBlock title="Elevation">{product.elevation_m.toLocaleString()} m</DetailBlock>}
+            {product.variety && <DetailBlock title="Variety">{product.variety}</DetailBlock>}
+            {product.harvest_year && <DetailBlock title="Harvest year">{product.harvest_year}</DetailBlock>}
             {product.flavor_notes.length > 0 && <DetailBlock title="Flavor notes">{product.flavor_notes.join(" · ")}</DetailBlock>}
             {product.brew_recommendations.length > 0 && <DetailBlock title="Brew recommendations">{product.brew_recommendations.join(", ")}</DetailBlock>}
           </div>
@@ -130,6 +181,16 @@ export default function ProductPage() {
           {product.description && <p className="mt-8 text-foreground/75">{product.description}</p>}
         </div>
       </section>
+
+      {related.length > 0 && (
+        <section className="container border-t border-border/60 py-16">
+          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-accent">Pairs well with</div>
+          <h2 className="mt-2 font-serif text-3xl text-espresso">You may also like</h2>
+          <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {related.map((p) => <ProductCard key={p.id} product={p} />)}
+          </div>
+        </section>
+      )}
 
       <Footer />
       <WhatsAppFloat />

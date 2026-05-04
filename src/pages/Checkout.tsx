@@ -6,6 +6,7 @@ import { z } from "zod";
 import { MessageCircle } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import SEO from "@/components/SEO";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -147,6 +148,7 @@ export default function Checkout() {
 
   return (
     <div className="min-h-screen bg-background">
+      <SEO title="Checkout" description="Complete your Masto coffee order — Cash on Delivery or bank transfer in NPR." canonical="/checkout" noindex />
       <Header />
       <section className="container py-12">
         <h1 className="font-serif text-4xl text-espresso">Checkout</h1>
