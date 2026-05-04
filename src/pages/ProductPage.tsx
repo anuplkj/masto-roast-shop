@@ -70,8 +70,48 @@ export default function ProductPage() {
     toast({ title: "Added to cart", description: `${product.name} (${variant.weight}) × ${qty}` });
   };
 
+  const seoDesc =
+    product.seo_description ||
+    product.description ||
+    `${product.name} — ${product.short_note || "Specialty single-origin Nepali coffee, freshly roasted in Kathmandu."}`;
+  const productJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    name: product.name,
+    description: seoDesc,
+    image: product.image_url ? [product.image_url] : undefined,
+    brand: { "@type": "Brand", name: "Masto Artisan Roastery" },
+    category: "Coffee",
+    offers: product.variants.map((v) => ({
+      "@type": "Offer",
+      sku: v.id,
+      name: `${product.name} — ${v.weight}`,
+      price: v.price_npr,
+      priceCurrency: "NPR",
+      availability: v.stock > 0 ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
+      url: typeof window !== "undefined" ? window.location.href : "",
+    })),
+  };
+  const breadcrumbJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: typeof window !== "undefined" ? window.location.origin : "" },
+      { "@type": "ListItem", position: 2, name: "Shop", item: typeof window !== "undefined" ? `${window.location.origin}/shop` : "" },
+      { "@type": "ListItem", position: 3, name: product.name },
+    ],
+  };
+
   return (
     <div className="min-h-screen bg-background">
+      <SEO
+        title={`${product.name} — Single-Origin Nepali Coffee`}
+        description={seoDesc}
+        canonical={`/product/${product.slug}`}
+        image={product.image_url ?? undefined}
+        type="product"
+        jsonLd={[productJsonLd, breadcrumbJsonLd]}
+      />
       <Header />
       <div className="container py-8">
         <Link to="/shop" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
