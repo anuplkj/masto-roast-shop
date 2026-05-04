@@ -258,7 +258,9 @@ function ProductRow({ product, onChange }: { product: Product; onChange: () => v
       flavor_notes: p.flavor_notes, brew_recommendations: p.brew_recommendations,
       roast: p.roast, process: p.process, origin: p.origin,
       active: p.active, featured: p.featured, image_url: p.image_url,
-    }).eq("id", p.id);
+      elevation_m: p.elevation_m, variety: p.variety, harvest_year: p.harvest_year,
+      seo_description: p.seo_description,
+    } as any).eq("id", p.id);
     if (error) { toast({ title: "Save failed", description: error.message, variant: "destructive" }); return; }
     for (const v of p.variants) {
       await supabase.from("product_variants").update({ price_npr: v.price_npr, stock: v.stock }).eq("id", v.id);
