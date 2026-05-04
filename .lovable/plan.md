@@ -1,116 +1,77 @@
-## Migrating from Lovable Cloud to your own Supabase project
+# Masto Roastery — Master Prompt Alignment Plan
 
-You currently run on Lovable Cloud (a managed Supabase). We'll move everything — schema, data, auth users, storage files, and edge functions — to your own Supabase project, then re-point the app.
+The site already covers most of the brief: brand styling, Shop/Product/Cart/Checkout, Wholesale form + WhatsApp, Story + Gallery, Admin dashboard (orders, inquiries, products, gallery, branding, coupons, settings), COD + bank transfer, NPR currency, Instagram/Facebook in footer, lazy-loaded images. This plan only addresses the **real gaps**.
 
-Important caveat: Lovable Cloud cannot be turned off on this project. After migration it will sit idle and unused; the app will talk only to your Supabase.
+## Gaps vs. master prompt
 
----
+| Area | Current | Gap |
+|---|---|---|
+| Per-page SEO (title/description/canonical/OG) | Only static `index.html` | None per route |
+| Structured data (JSON-LD) | None | Organization, Product, Breadcrumb |
+| Sitemap & robots | `robots.txt` exists, no sitemap | Missing `sitemap.xml` |
+| Homepage conversion sections | Hero + featured + 3 freshness cards | No "Ethical Sourcing / Small-Batch / Roasted in Kathmandu" value-prop trio with the prompt's wording, no testimonials / "as served in" logos |
+| Product page specs | roast/process/origin/flavor/brew | No Elevation / Variety / Harvest year |
+| Product page cross-sell | None | "You may also like…" |
+| Product SEO field | description only | No dedicated SEO/meta description in admin |
+| Email notifications | UI calls `send-wholesale-notification` but **function does not exist**; no order email either | Build both edge functions |
+| H1 hierarchy | Mostly fine | Audit for one H1 per page |
 
-### Step 1 — Get your Supabase credentials (you do this)
+## What I'll build
 
-In your Supabase dashboard:
+### 1. SEO foundation
+- Add `react-helmet-async` and an `<HelmetProvider>` in `App.tsx`.
+- New `src/components/SEO.tsx` — props: `title`, `description`, `canonical`, `image`, `jsonLd?`. Sets `<title>`, meta description, canonical, OG, Twitter, optional JSON-LD `<script>`.
+- Wire SEO into: `Index`, `Shop`, `ProductPage` (dynamic from product), `Story`, `Wholesale`, `Cart`, `Checkout`, `NotFound`. Each gets keyword-rich title + description from the prompt's vocabulary ("Artisan Coffee Roastery in Nepal", "Specialty Himalayan Coffee", "High-altitude Nepali beans", "Ethically sourced specialty coffee", etc.).
+- JSON-LD: `Organization` + `LocalBusiness` on home; `Product` (name, image, description, offers in NPR with variant prices, brand) on product pages; `BreadcrumbList` on Shop/Product/Story.
+- Tighten `index.html` defaults (locale, og:site_name, theme-color).
 
-1. Open your project → **Project Settings → API**.
-2. Copy these three values and have them ready:
-   - **Project URL** (e.g. `https://abcdxyz.supabase.co`)
-   - **anon public key** (long JWT starting `eyJ…`, role `anon`)
-   - **service_role key** (long JWT starting `eyJ…`, role `service_role`) — keep this secret, it bypasses RLS. We use it only during the one-time migration.
-3. Open **Project Settings → Database → Connection string** and copy the **URI** (postgres connection string with the password). Needed for data dump/restore.
+### 2. Sitemap
+- `public/sitemap.xml` listing `/`, `/shop`, `/story`, `/wholesale`. Product URLs are dynamic, so add a small build-time generator script (`scripts/generate-sitemap.ts`) that queries Supabase for active product slugs and writes `public/sitemap.xml`. Run manually or via `npm run sitemap`.
+- Update `public/robots.txt` to reference the sitemap.
 
-When you're ready, I'll prompt you to paste them via secure secret inputs (never stored in code).
+### 3. Homepage conversion polish
+- Rename/rewrite the freshness trio to match the prompt: **Ethical Direct Sourcing**, **Small-Batch Artisan Roasting**, **Freshly Roasted in Kathmandu**.
+- Update featured-product CTA copy to "Experience the Roast".
+- Add a **Social Proof** section (testimonials / "As served in" cafe logos). Backed by a new `testimonials` table managed in Admin so it's editable, not hard-coded. Renders only if rows exist (no empty section).
 
----
+### 4. Product page enhancements
+- Add DB columns: `elevation_m int`, `variety text`, `harvest_year int`, `seo_description text` on `products`.
+- Surface Elevation / Variety / Harvest in the existing detail grid.
+- Add "You may also like" section (3 random other active products).
+- Use `seo_description` (fallback to `description`) for the meta description.
+- Admin Products tab: add inputs for the four new fields.
 
-### Step 2 — Recreate the schema in your Supabase
+### 5. Email notifications (currently broken)
+- Create `supabase/functions/send-wholesale-notification/index.ts` and `supabase/functions/send-order-notification/index.ts`.
+- Use Lovable's built-in transactional email infrastructure (`email_domain--setup_email_infra` + `scaffold_transactional_email`) so no API key is required. Templates: "New wholesale inquiry" and "New order received", both sent to `settings.notification_email` (defaults to `mastoartisanroastry@gmail.com`).
+- Wire `Checkout` to invoke `send-order-notification` after order insert (Wholesale already invokes the wholesale one).
+- **Prerequisite for the user:** an email sending domain must be configured in Lovable Cloud. If none is set up, I'll prompt you to add one before deployment.
 
-Run a single SQL migration in your Supabase SQL editor that creates:
+### 6. Small a11y / semantic pass
+- Ensure each page has exactly one `<h1>`.
+- Add descriptive alt text patterns for gallery uploads (already supported via caption).
 
-- Enums: `app_role`, `order_status`, `payment_method`, `delivery_method`, `inquiry_status`, `weight`, `coupon_type`
-- Tables: `profiles`, `user_roles`, `products`, `product_variants`, `orders`, `order_items`, `wholesale_inquiries`, `gallery_images`, `coupons`, `settings`
-- Functions: `has_role()`, `handle_new_user()`, `set_updated_at()` (all `SECURITY DEFINER` with locked `search_path`)
-- Trigger: `on_auth_user_created` on `auth.users` → `handle_new_user()`
-- All RLS policies (matching what you have today)
-- Storage buckets: `product-images`, `gallery`, `branding` (public) + storage RLS
+## Out of scope (explicitly)
+- Backlink building, Google Search Console submission, paid SEO.
+- Replacing the current visual design — the prompt's brand palette already matches.
+- Auth changes, payment gateway integration (manual bank + COD remain).
 
-I'll generate this SQL file and give it to you (or run it via the service-role connection string with `psql`).
+## Tech notes
+- New dependency: `react-helmet-async`.
+- Migrations: add columns to `products`; new `testimonials` table with admin RLS + public read.
+- Edge functions deploy automatically.
+- No changes to `src/integrations/supabase/client.ts` or `types.ts`.
 
----
+## Files touched (approx.)
+- `src/App.tsx` (HelmetProvider)
+- `src/components/SEO.tsx` (new)
+- `src/pages/*.tsx` (SEO + small content tweaks)
+- `src/pages/Index.tsx` (value props rename, social-proof section)
+- `src/pages/ProductPage.tsx` (specs, cross-sell)
+- `src/pages/Admin.tsx` (new product fields, testimonials tab)
+- `index.html` (meta polish)
+- `public/robots.txt`, `public/sitemap.xml`, `scripts/generate-sitemap.ts` (new)
+- `supabase/functions/send-order-notification/`, `send-wholesale-notification/` (new)
+- DB migration: `products` columns + `testimonials` table
 
-### Step 3 — Copy the data
-
-Using your service-role connection string, dump from Lovable Cloud and restore into your Supabase, in this order to respect references:
-
-```text
-settings → coupons → products → product_variants
-gallery_images → wholesale_inquiries → orders → order_items
-```
-
-Method: `pg_dump --data-only --table=public.<t>` from source, then `psql` into target. Your IDs (UUIDs) are preserved so order history stays intact.
-
----
-
-### Step 4 — Migrate auth users
-
-For each user in Lovable Cloud's `auth.users`:
-
-1. Export via Supabase Admin API (`GET /auth/v1/admin/users`) using the source service-role key.
-2. Re-create in your Supabase via `POST /auth/v1/admin/users` with `email_confirm: true` and the original `id` so foreign keys (`profiles.id`, `user_roles.user_id`) keep working.
-3. Copy `profiles` and `user_roles` rows for those user IDs.
-
-Caveat: **Password hashes cannot be migrated** between Supabase projects via the public Admin API. Each existing user (just you, the admin, today) will need to use **"Forgot password"** on first login to set a new password. I'll wire up a reset-password page if you don't have one. If you only have one admin account, easiest path is: re-create that admin in your new Supabase via signup, then grant the `admin` role.
-
----
-
-### Step 5 — Migrate storage files
-
-For each bucket (`product-images`, `gallery`, `branding`):
-
-1. List objects via Lovable Cloud Storage API.
-2. Download each file.
-3. Upload to your Supabase under the same path so existing `image_url` values keep resolving (the URL host changes; we'll rewrite `products.image_url`, `gallery_images.image_url`, `settings.logo_url` to the new project URL).
-
----
-
-### Step 6 — Re-deploy edge functions
-
-Currently no custom edge functions exist in this project. If any get added before migration, we'll redeploy them via the Supabase CLI to your project. Nothing to do for now.
-
----
-
-### Step 7 — Re-point the app
-
-Update the Vite env to your Supabase:
-
-```text
-VITE_SUPABASE_URL          = https://<your-ref>.supabase.co
-VITE_SUPABASE_PUBLISHABLE_KEY = <your anon key>
-VITE_SUPABASE_PROJECT_ID   = <your-ref>
-```
-
-Replace `src/integrations/supabase/client.ts` with a hand-maintained client (since Lovable's auto-generated one targets the Cloud project). Also regenerate `src/integrations/supabase/types.ts` from your Supabase using `npx supabase gen types typescript --project-id <your-ref>` so types match.
-
-Quick smoke test after switch:
-
-- `/shop` loads products
-- Add to cart → `/checkout` → places an order in your Supabase
-- `/admin/login` → sign in (or reset password) → orders/inquiries/products visible
-- Image uploads write to your Supabase storage
-
----
-
-### Technical details
-
-- Source project ref: `pqnsdjammeockgnyapas` (Lovable Cloud)
-- Migration script will be a single Node/TS file in `/tmp` using both projects' service-role keys; it does data + storage + auth in one run with progress logs and is idempotent (uses `ON CONFLICT (id) DO NOTHING`).
-- No production user is interrupted: we copy data, then flip the env vars, then redeploy. There's a brief window where new orders could land in the old DB; safest to do this during low traffic.
-- `LOVABLE_API_KEY` is unrelated to Supabase — it stays as-is for Lovable AI calls (if any).
-
----
-
-### What I'll need from you to start
-
-1. The 3 values from Step 1 (URL, anon key, service_role key) for **your Supabase**.
-2. The Postgres connection URI from your Supabase (Step 1, item 3).
-3. Confirmation you accept the password-reset caveat for migrated auth users.
-
-Once you approve this plan and provide the credentials via the secret prompts, I'll generate the schema SQL, run the migration script, swap the env, and verify end-to-end.
+Approve and I'll implement in this order: DB migration → SEO component + per-page wiring → product page specs/cross-sell → homepage sections → email functions → sitemap.
