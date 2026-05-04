@@ -324,6 +324,10 @@ function ProductRow({ product, onChange }: { product: Product; onChange: () => v
         <div><Label>Origin</Label><Input value={p.origin ?? ""} onChange={(e) => update({ origin: e.target.value })} className="mt-1" /></div>
         <div><Label>Short note</Label><Input value={p.short_note ?? ""} onChange={(e) => update({ short_note: e.target.value })} className="mt-1" /></div>
         <div className="md:col-span-2"><Label>Description</Label><Textarea rows={3} value={p.description ?? ""} onChange={(e) => update({ description: e.target.value })} className="mt-1" /></div>
+        <div className="md:col-span-2"><Label>SEO description (meta tag, ~155 chars)</Label><Textarea rows={2} maxLength={200} value={p.seo_description ?? ""} onChange={(e) => update({ seo_description: e.target.value })} className="mt-1" /></div>
+        <div><Label>Elevation (m)</Label><Input type="number" value={p.elevation_m ?? ""} onChange={(e) => update({ elevation_m: e.target.value ? Number(e.target.value) : null })} className="mt-1" /></div>
+        <div><Label>Variety</Label><Input placeholder="e.g. Caturra, SL28" value={p.variety ?? ""} onChange={(e) => update({ variety: e.target.value })} className="mt-1" /></div>
+        <div><Label>Harvest year</Label><Input type="number" value={p.harvest_year ?? ""} onChange={(e) => update({ harvest_year: e.target.value ? Number(e.target.value) : null })} className="mt-1" /></div>
         <div className="md:col-span-2"><Label>Flavor notes (comma separated)</Label><Input value={p.flavor_notes.join(", ")} onChange={(e) => update({ flavor_notes: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) })} className="mt-1" /></div>
         <div className="md:col-span-2"><Label>Brew recommendations (comma separated)</Label><Input value={p.brew_recommendations.join(", ")} onChange={(e) => update({ brew_recommendations: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) })} className="mt-1" /></div>
         {WEIGHTS.map((w) => {
