@@ -4,6 +4,7 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import ProductCard from "@/components/ProductCard";
 import WhatsAppFloat from "@/components/WhatsAppFloat";
+import SEO from "@/components/SEO";
 import { Button } from "@/components/ui/button";
 import { fetchProducts } from "@/lib/api";
 
@@ -23,6 +24,19 @@ export default function Shop() {
 
   return (
     <div className="min-h-screen bg-background">
+      <SEO
+        title="Shop Single-Origin Nepali Coffee Online"
+        description="Buy specialty Nepali coffee online — single-origin, small-batch, ethically sourced beans from Ilam, Gulmi & Kaski. Whole bean or ground, shipped fresh from Kathmandu."
+        canonical="/shop"
+        jsonLd={{
+          "@context": "https://schema.org",
+          "@type": "BreadcrumbList",
+          itemListElement: [
+            { "@type": "ListItem", position: 1, name: "Home", item: typeof window !== "undefined" ? window.location.origin : "" },
+            { "@type": "ListItem", position: 2, name: "Shop" },
+          ],
+        }}
+      />
       <Header />
       <section className="container py-12 md:py-16">
         <div className="text-xs font-semibold uppercase tracking-[0.2em] text-accent">Shop</div>
