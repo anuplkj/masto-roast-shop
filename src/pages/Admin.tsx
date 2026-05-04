@@ -57,6 +57,7 @@ export default function Admin() {
             <TabsTrigger value="inquiries">Wholesale</TabsTrigger>
             <TabsTrigger value="products">Products</TabsTrigger>
             <TabsTrigger value="gallery">Gallery</TabsTrigger>
+            <TabsTrigger value="testimonials">Testimonials</TabsTrigger>
             <TabsTrigger value="branding">Branding</TabsTrigger>
             <TabsTrigger value="coupons">Coupons</TabsTrigger>
             <TabsTrigger value="settings">Settings</TabsTrigger>
@@ -65,6 +66,7 @@ export default function Admin() {
           <TabsContent value="inquiries" className="mt-6"><InquiriesTab /></TabsContent>
           <TabsContent value="products" className="mt-6"><ProductsTab /></TabsContent>
           <TabsContent value="gallery" className="mt-6"><GalleryTab /></TabsContent>
+          <TabsContent value="testimonials" className="mt-6"><TestimonialsTab /></TabsContent>
           <TabsContent value="branding" className="mt-6"><BrandingTab /></TabsContent>
           <TabsContent value="coupons" className="mt-6"><CouponsTab /></TabsContent>
           <TabsContent value="settings" className="mt-6"><SettingsTab /></TabsContent>
