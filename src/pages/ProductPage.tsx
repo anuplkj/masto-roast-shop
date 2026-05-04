@@ -1,13 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Minus, Plus, ShoppingBag, ArrowLeft } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import ProductImage from "@/components/ProductImage";
+import ProductCard from "@/components/ProductCard";
 import WhatsAppFloat from "@/components/WhatsAppFloat";
+import SEO from "@/components/SEO";
 import { Button } from "@/components/ui/button";
-import { fetchProductBySlug, formatNPR, type Weight } from "@/lib/api";
+import { fetchProductBySlug, fetchProducts, formatNPR, type Weight } from "@/lib/api";
 import { useCart } from "@/context/CartContext";
 import { toast } from "@/hooks/use-toast";
 
@@ -18,6 +20,7 @@ export default function ProductPage() {
     queryFn: () => fetchProductBySlug(slug!),
     enabled: !!slug,
   });
+  const { data: allProducts = [] } = useQuery({ queryKey: ["products"], queryFn: fetchProducts });
   const { add } = useCart();
   const [weight, setWeight] = useState<Weight>("250g");
   const [qty, setQty] = useState(1);
@@ -28,6 +31,11 @@ export default function ProductPage() {
       setWeight((inStock ?? product.variants[0]).weight);
     }
   }, [product]);
+
+  const related = useMemo(() => {
+    if (!product) return [];
+    return allProducts.filter((p) => p.active && p.id !== product.id).slice(0, 3);
+  }, [allProducts, product]);
 
   if (isLoading) {
     return (
