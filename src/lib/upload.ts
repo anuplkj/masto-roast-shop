@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 const MAX_DIM = 1600;
 const QUALITY = 0.85;
 
-async function resizeImage(file: File): Promise<Blob> {
+async function resizeImage(file: File, preserveTransparency = false): Promise<Blob> {
   if (file.type === "image/svg+xml") return file;
   const img = await new Promise<HTMLImageElement>((resolve, reject) => {
     const i = new Image();
@@ -23,8 +23,10 @@ async function resizeImage(file: File): Promise<Blob> {
   const ctx = canvas.getContext("2d")!;
   ctx.drawImage(img, 0, 0, width, height);
   URL.revokeObjectURL(img.src);
+  const isPng = preserveTransparency || file.type === "image/png";
+  const outType = isPng ? "image/png" : "image/jpeg";
   const blob = await new Promise<Blob>((resolve, reject) =>
-    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("toBlob failed"))), "image/jpeg", QUALITY)
+    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("toBlob failed"))), outType, QUALITY)
   );
   return blob;
 }
@@ -34,8 +36,11 @@ export async function uploadImage(
   file: File,
   pathPrefix = ""
 ): Promise<string> {
-  const blob = await resizeImage(file);
-  const ext = blob.type === "image/svg+xml" ? "svg" : "jpg";
+  // Preserve transparency for branding assets (logos)
+  const preserveTransparency = bucket === "branding" && file.type === "image/png";
+  const blob = await resizeImage(file, preserveTransparency);
+  const ext =
+    blob.type === "image/svg+xml" ? "svg" : blob.type === "image/png" ? "png" : "jpg";
   const path = `${pathPrefix}${pathPrefix ? "/" : ""}${crypto.randomUUID()}.${ext}`;
   const { error } = await supabase.storage.from(bucket).upload(path, blob, {
     cacheControl: "3600",
