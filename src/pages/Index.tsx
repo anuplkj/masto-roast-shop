@@ -8,6 +8,7 @@ import ProductCard from "@/components/ProductCard";
 import WhatsAppFloat from "@/components/WhatsAppFloat";
 import SEO from "@/components/SEO";
 import { fetchProducts, fetchTestimonials } from "@/lib/api";
+import storyRoasting from "@/assets/story-roasting.jpg";
 import { useSettings } from "@/hooks/useSettings";
 import { whatsappLink } from "@/lib/whatsapp";
 
@@ -115,11 +116,13 @@ export default function Index() {
               <Link to="/story">Read our story <ArrowRight className="ml-2 h-4 w-4" /></Link>
             </Button>
           </div>
-          <div className="relative aspect-[4/3] overflow-hidden rounded-2xl bg-gradient-to-br from-espresso to-[hsl(22_45%_14%)]">
-            <div className="absolute inset-0 opacity-[0.08] [background-image:radial-gradient(white_1px,transparent_1px)] [background-size:14px_14px]" />
-            <div className="flex h-full items-center justify-center">
-              <Flame className="h-24 w-24 text-terracotta/60" strokeWidth={1} />
-            </div>
+          <div className="relative aspect-[4/3] overflow-hidden rounded-2xl bg-espresso">
+            <img
+              src={storyRoasting}
+              alt="Freshly roasted coffee beans in the drum roaster"
+              loading="lazy"
+              className="h-full w-full object-cover"
+            />
           </div>
         </div>
       </section>
