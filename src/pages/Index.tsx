@@ -73,17 +73,6 @@ export default function Index() {
               </Button>
             </div>
           </div>
-          <div className="relative hidden md:block">
-            <div className="relative mx-auto aspect-square w-full max-w-md rounded-full bg-gradient-to-br from-terracotta/30 to-espresso/40 p-12 backdrop-blur">
-              <div className="flex h-full w-full items-center justify-center rounded-full border border-cream/15">
-                {settings?.logo_url ? (
-                  <img src={settings.logo_url} alt={settings.brand_name} className="max-h-3/4 max-w-3/4 object-contain" />
-                ) : (
-                  <Coffee className="h-32 w-32 text-cream/40" strokeWidth={0.8} />
-                )}
-              </div>
-            </div>
-          </div>
         </div>
       </section>
 
