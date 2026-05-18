@@ -87,6 +87,22 @@ function OrdersTab() {
     },
   });
 
+  useEffect(() => {
+    const channel = supabase
+      .channel("admin-orders-rt")
+      .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, (payload) => {
+        qc.invalidateQueries({ queryKey: ["admin-orders"] });
+        if (payload.eventType === "INSERT") {
+          toast({ title: "New order received", description: `From ${(payload.new as any).customer_name}` });
+        }
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "order_items" }, () => {
+        qc.invalidateQueries({ queryKey: ["admin-orders"] });
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [qc]);
+
   const setStatus = async (id: string, status: "new" | "confirmed" | "fulfilled" | "cancelled") => {
     await supabase.from("orders").update({ status }).eq("id", id);
     qc.invalidateQueries({ queryKey: ["admin-orders"] });
