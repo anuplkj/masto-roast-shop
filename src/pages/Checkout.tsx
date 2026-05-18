@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -17,6 +17,7 @@ import { fetchActiveCoupon, formatNPR } from "@/lib/api";
 import { supabase } from "@/integrations/supabase/client";
 import { orderToWhatsappText, whatsappLink } from "@/lib/whatsapp";
 import { toast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
 
 const schema = z.object({
   name: z.string().trim().min(2, "Required").max(80),
@@ -32,16 +33,41 @@ type FormValues = z.infer<typeof schema>;
 export default function Checkout() {
   const { items, subtotal, clear, productsById } = useCart();
   const { data: settings } = useSettings();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [discount, setDiscount] = useState(0);
   const [appliedCode, setAppliedCode] = useState<string | undefined>();
   const [couponMsg, setCouponMsg] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const { register, handleSubmit, watch, formState: { errors } } = useForm<FormValues>({
+  const { register, handleSubmit, watch, reset, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: { delivery: "delivery", payment: "cod" },
   });
+
+  // Autofill from most recent order for logged-in users
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from("orders")
+        .select("customer_name, customer_phone, customer_address")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (cancelled || !data) return;
+      reset({
+        name: data.customer_name ?? "",
+        phone: data.customer_phone ?? "",
+        address: data.customer_address ?? "",
+        delivery: "delivery",
+        payment: "cod",
+      });
+    })();
+    return () => { cancelled = true; };
+  }, [user, reset]);
 
   const delivery = watch("delivery");
   const payment = watch("payment");
@@ -98,6 +124,7 @@ export default function Checkout() {
       const { data: orderRow, error: orderErr } = await supabase
         .from("orders")
         .insert({
+          user_id: user?.id ?? null,
           customer_name: v.name,
           customer_phone: v.phone,
           customer_address: v.address,
@@ -137,7 +164,7 @@ export default function Checkout() {
       }
 
       clear();
-      navigate(`/order/${orderId}`);
+      navigate(`/order/${orderId}?success=1`);
     } catch (e: any) {
       console.error(e);
       toast({ title: "Could not place order", description: e?.message ?? "Please try again", variant: "destructive" });

@@ -1,8 +1,9 @@
 import { Link, NavLink } from "react-router-dom";
-import { ShoppingBag, Menu } from "lucide-react";
+import { ShoppingBag, Menu, User } from "lucide-react";
 import { useState } from "react";
 import { useCart } from "@/context/CartContext";
 import { useSettings } from "@/hooks/useSettings";
+import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -15,6 +16,7 @@ const navItems = [
 export default function Header() {
   const { count } = useCart();
   const { data: settings } = useSettings();
+  const { user } = useAuth();
   const [open, setOpen] = useState(false);
 
   return (
@@ -51,6 +53,14 @@ export default function Header() {
         </nav>
 
         <div className="flex items-center gap-2">
+          <Link
+            to={user ? "/account" : "/login"}
+            className="inline-flex h-10 items-center justify-center rounded-full px-3 text-sm font-medium hover:bg-secondary"
+            aria-label={user ? "My account" : "Sign in"}
+          >
+            <User className="h-5 w-5 sm:mr-1.5" />
+            <span className="hidden sm:inline">{user ? "Account" : "Sign in"}</span>
+          </Link>
           <Link
             to="/cart"
             className="relative inline-flex h-10 w-10 items-center justify-center rounded-full hover:bg-secondary"

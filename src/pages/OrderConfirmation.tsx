@@ -1,4 +1,5 @@
-import { Link, useParams } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { CheckCircle2, MessageCircle } from "lucide-react";
 import Header from "@/components/Header";
@@ -8,6 +9,7 @@ import { formatNPR } from "@/lib/api";
 import { useSettings } from "@/hooks/useSettings";
 import { supabase } from "@/integrations/supabase/client";
 import { orderToWhatsappText, whatsappLink } from "@/lib/whatsapp";
+import OrderSuccessDialog from "@/components/OrderSuccessDialog";
 
 async function fetchOrder(id: string) {
   // Public-facing confirmation reads minimum needed via order_items insert echo.
@@ -20,11 +22,21 @@ async function fetchOrder(id: string) {
 
 export default function OrderConfirmation() {
   const { id } = useParams();
+  const [params, setParams] = useSearchParams();
   const { data } = useQuery({ queryKey: ["order", id], queryFn: () => fetchOrder(id!), enabled: !!id });
   const { data: settings } = useSettings();
 
   const order = data?.order;
   const items = data?.items ?? [];
+
+  const [successOpen, setSuccessOpen] = useState(false);
+  useEffect(() => {
+    if (params.get("success") === "1") {
+      setSuccessOpen(true);
+      params.delete("success");
+      setParams(params, { replace: true });
+    }
+  }, [params, setParams]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -96,6 +108,7 @@ export default function OrderConfirmation() {
           )}
         </div>
       </section>
+      <OrderSuccessDialog open={successOpen} onOpenChange={setSuccessOpen} phone={order?.customer_phone} />
       <Footer />
     </div>
   );
