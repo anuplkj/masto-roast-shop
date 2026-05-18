@@ -116,6 +116,7 @@ export type Database = {
           status: Database["public"]["Enums"]["order_status"]
           subtotal: number
           total: number
+          user_id: string | null
         }
         Insert: {
           coupon_code?: string | null
@@ -132,6 +133,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["order_status"]
           subtotal: number
           total: number
+          user_id?: string | null
         }
         Update: {
           coupon_code?: string | null
@@ -148,6 +150,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["order_status"]
           subtotal?: number
           total?: number
+          user_id?: string | null
         }
         Relationships: []
       }
