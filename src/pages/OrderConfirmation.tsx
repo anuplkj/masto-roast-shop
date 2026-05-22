@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { CheckCircle2, MessageCircle } from "lucide-react";
@@ -10,6 +10,9 @@ import { useSettings } from "@/hooks/useSettings";
 import { supabase } from "@/integrations/supabase/client";
 import { orderToWhatsappText, whatsappLink } from "@/lib/whatsapp";
 import OrderSuccessDialog from "@/components/OrderSuccessDialog";
+import { useCart } from "@/context/CartContext";
+
+const PENDING_CLEAR_KEY = "masto.pendingOrderClear";
 
 async function fetchOrder(id: string) {
   // Public-facing confirmation reads minimum needed via order_items insert echo.
@@ -29,6 +32,7 @@ export default function OrderConfirmation() {
   const order = data?.order;
   const items = data?.items ?? [];
 
+  const { clear } = useCart();
   const [successOpen, setSuccessOpen] = useState(false);
   useEffect(() => {
     if (params.get("success") === "1") {
@@ -37,6 +41,11 @@ export default function OrderConfirmation() {
       setParams(params, { replace: true });
     }
   }, [params, setParams]);
+
+  const handleConfirm = useCallback(() => {
+    clear();
+    try { sessionStorage.removeItem(PENDING_CLEAR_KEY); } catch {}
+  }, [clear]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -108,7 +117,7 @@ export default function OrderConfirmation() {
           )}
         </div>
       </section>
-      <OrderSuccessDialog open={successOpen} onOpenChange={setSuccessOpen} phone={order?.customer_phone} />
+      <OrderSuccessDialog open={successOpen} onOpenChange={setSuccessOpen} phone={order?.customer_phone} onConfirm={handleConfirm} />
       <Footer />
     </div>
   );

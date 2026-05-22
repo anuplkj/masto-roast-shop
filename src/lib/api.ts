@@ -58,6 +58,7 @@ export interface Settings {
   instagram_url: string | null;
   facebook_url: string | null;
   notification_email: string;
+  bank_transfer_enabled: boolean;
 }
 
 export interface Coupon {
@@ -125,6 +126,7 @@ export async function fetchSettings(): Promise<Settings> {
     instagram_url: null,
     facebook_url: null,
     notification_email: "mastoartisanroastry@gmail.com",
+    bank_transfer_enabled: true,
   }) as Settings;
 }
 
