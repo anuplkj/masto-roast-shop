@@ -1,0 +1,1 @@
+ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS bank_transfer_enabled boolean NOT NULL DEFAULT true;

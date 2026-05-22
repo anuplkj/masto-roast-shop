@@ -1,67 +1,59 @@
-# Order Workflow Upgrade: Realtime Admin, Success Popup, Customer Accounts
+## Scope
 
-Three connected improvements to the order flow.
+Three logic updates: defer cart clearing until user dismisses the success popup, let the admin toggle Bank Transfer visibility, and tighten the customer/admin separation around `/admin`.
 
-## 1. Realtime Admin Orders
+---
 
-- Enable Supabase Realtime on `public.orders` and `public.order_items` (add to `supabase_realtime` publication, set `REPLICA IDENTITY FULL`).
-- In `Admin.tsx > OrdersTab`, subscribe to `postgres_changes` on `orders` (INSERT/UPDATE/DELETE) and invalidate the orders query so new orders appear instantly without refresh. Show a subtle toast when a new order arrives.
+### 1. Checkout state cleanup
 
-## 2. Order Success Popup
+Today `Checkout.tsx` calls `clear()` immediately before navigating to `/order/:id?success=1`. Move the cart wipe so it only runs when the user dismisses the success modal.
 
-- After successful checkout, instead of silently navigating, show an artisan-themed success **modal** (shadcn Dialog) with:
-  - Title: "Order Placed Successfully"
-  - Message: "We will call you at {phone} within 24 hours to confirm your fresh roast."
-  - Buttons: "Back to Home" (→ `/`) and, if logged in, "View My Orders" (→ `/account`).
-- Modal lives on the order confirmation page (`/order/:id`) so a refresh-safe URL still exists. Checkout navigates there with a `?success=1` flag that auto-opens the modal once.
-- Keep the existing WhatsApp open behavior (only fires once, before navigation).
+- Remove the `clear()` call from `Checkout.tsx`'s `onSubmit`.
+- Stash the just-placed order's `id` in `sessionStorage` (`masto.pendingOrderClear`) before navigating, so a refresh of the confirmation page still triggers the wipe once.
+- In `OrderConfirmation.tsx`, when `?success=1` is present, open the dialog (already wired) and pass an `onConfirm` callback to `OrderSuccessDialog`.
+- In `OrderSuccessDialog.tsx`, rename the primary CTA to "Return to Shop", point it to `/shop`, and call the provided `onConfirm` before navigation. `onConfirm` calls `clear()` from `useCart` and removes the sessionStorage flag.
+- "View my orders" (logged-in users) also triggers `onConfirm` so the cart is empty either way.
 
-## 3. Customer Auth + Order History
+### 2. Admin-controlled Bank Transfer toggle
 
-### Auth
-- Add Email/Password signup + login and Google sign-in for customers (separate from admin login).
-- New routes: `/login`, `/signup` (shared auth page with tabs). Reuse `useAuth` hook.
-- Header gets an "Account" / "Sign in" link.
+The project already has a single-row `public.settings` table consumed via `useSettings()`. Re-use it instead of a parallel `site_settings` table to avoid two sources of truth.
 
-### Database
-- Migration on `orders`: add `user_id uuid` (nullable, references `auth.users(id)` conceptually — store as uuid, no FK to auth schema per guidelines).
-- RLS update on `orders` + `order_items`:
-  - Remove the current "Anyone can read orders/order_items" public policies (security upgrade) and replace with:
-    - Public can read a single order by id only via existing guest flow → keep a permissive SELECT for unauthenticated lookup by id (kept to not break guest order confirmation page).
-    - Authenticated users can read their own orders (`user_id = auth.uid()`).
-  - Admin policies unchanged.
+- Migration: `ALTER TABLE public.settings ADD COLUMN bank_transfer_enabled boolean NOT NULL DEFAULT true;` (Supabase types regenerate automatically).
+- `Checkout.tsx`: when rendering the Payment card, only render the Bank Transfer `<Radio>` if `settings?.bank_transfer_enabled !== false`. If the current form value is `bank` but the option is disabled (e.g. toggled off after load), force-reset `payment` to `cod`.
+- `Admin.tsx > SettingsTab`: add a labelled `<Switch>` "Allow Bank Transfer at checkout". On change, `update` the `settings` row and invalidate the `settings` query so the public site reflects it.
 
-### Checkout integration
-- If `user` is logged in, set `user_id` on insert and prefill name/phone/address from their last order (or a lightweight `customer_profiles` extension — for v1, prefill from most recent order).
+If you specifically want a brand-new `site_settings` table instead, say so and I'll branch the plan.
 
-### Account page
-- New `/account` route (protected, redirects to `/login` if unauthenticated).
-- Lists orders: date, items (joined from `order_items`), total NPR, status badge.
-- Click row → existing `/order/:id` page.
+### 3. Customer / admin separation
 
-## Technical Details
+The project already follows the recommended pattern: roles live in `public.user_roles` (separate from `profiles`) and are checked via the `has_role(uid, role)` security-definer function. All admin RLS policies on `orders`, `order_items`, `products`, `coupons`, `settings`, etc. already use `has_role(auth.uid(), 'admin')`. Adding a duplicate `role` column to `profiles` would create a second source of truth and is a known privilege-escalation footgun, so I'm keeping the existing structure and just hardening the routing/signup flow.
 
-Files to create:
-- `src/pages/Login.tsx` — email/password + Google, tabs for signup/login.
-- `src/pages/Account.tsx` — order history list.
-- `src/components/OrderSuccessDialog.tsx` — reusable dialog.
+- Confirm `handle_new_user()` trigger (already present) assigns `'user'` to every new signup except the very first account → keeps "Shop-side signup = customer" behavior.
+- New `src/hooks/useRequireAdmin.ts`: waits for `useAuth()` `loading` to settle, then:
+  - if no `user` → `navigate("/admin/login", { replace: true })`
+  - if `user && !isAdmin` → `navigate("/", { replace: true })` and toast "Admin access only".
+- `Admin.tsx`: replace the current inline guard with `useRequireAdmin()` and render nothing (or a spinner) until cleared. `AdminLogin.tsx` remains the login surface for admins.
+- `Login.tsx` / signup flow stays customer-only and lands users on `/account`. No UI hint that `/admin` exists.
+- RLS audit pass: re-run the linter after the migration and confirm every admin-only policy still uses `has_role(auth.uid(), 'admin')`. No new policies needed since data tables already gate on it.
+- Document in security memory: roles live in `user_roles`, never in `profiles`; admin routes are guarded both client-side (`useRequireAdmin`) and server-side (RLS via `has_role`).
 
-Files to edit:
-- `src/App.tsx` — add `/login`, `/account` routes.
-- `src/components/Header.tsx` — Account/Sign in link.
-- `src/pages/Checkout.tsx` — include `user_id`, prefill from auth, navigate with `?success=1`.
-- `src/pages/OrderConfirmation.tsx` — read `?success=1`, open dialog.
-- `src/pages/Admin.tsx` (OrdersTab) — realtime subscription + query invalidation.
+---
 
-Migrations:
-1. `alter table public.orders add column user_id uuid;` + index.
-2. Update RLS policies on `orders` and `order_items` for owner reads.
-3. `alter publication supabase_realtime add table public.orders;` + `alter table public.orders replica identity full;` (same for `order_items` if needed for admin detail).
+### Files
 
-Auth config:
-- Call `configure_social_auth` with Google.
-- Do NOT enable auto-confirm email; standard email verification flow.
+**Create**
+- `src/hooks/useRequireAdmin.ts`
 
-Out of scope:
-- Password reset page (can add later if requested).
-- Editing saved addresses (prefill is read-only for v1).
+**Edit**
+- `src/pages/Checkout.tsx` — drop early `clear()`, set sessionStorage flag, hide Bank Transfer when disabled.
+- `src/pages/OrderConfirmation.tsx` — pass `onConfirm` to dialog.
+- `src/components/OrderSuccessDialog.tsx` — "Return to Shop" CTA, calls `onConfirm` (clears cart) before navigating.
+- `src/pages/Admin.tsx` — use `useRequireAdmin`; add Bank Transfer switch to `SettingsTab`.
+
+**Migration**
+- Add `bank_transfer_enabled boolean NOT NULL DEFAULT true` to `public.settings`.
+
+### Out of scope
+- Creating a separate `site_settings` table (using existing `settings` instead — confirm if you'd rather have a new table).
+- Adding `role` to `profiles` (would conflict with the existing secure `user_roles` design).
+- Password reset / email change flows.

@@ -6,37 +6,27 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useRequireAdmin } from "@/hooks/useRequireAdmin";
 import { fetchProducts, fetchSettings, fetchGallery, formatNPR, WEIGHTS, type Product, type Settings, type Weight } from "@/lib/api";
 import { uploadImage, deleteImage } from "@/lib/upload";
 import { toast } from "@/hooks/use-toast";
 
 export default function Admin() {
-  const { user, isAdmin, loading, signOut } = useAuth();
+  const { signOut } = useAuth();
   const navigate = useNavigate();
+  const { ready, loading } = useRequireAdmin();
 
-  useEffect(() => {
-    if (!loading && !user) navigate("/admin/login");
-  }, [loading, user, navigate]);
-
-  if (loading) return <div className="flex min-h-screen items-center justify-center bg-cream">Loading…</div>;
-  if (!user) return null;
-  if (!isAdmin) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-cream p-6">
-        <div className="max-w-md rounded-2xl border border-border bg-card p-8 text-center shadow-soft">
-          <h1 className="font-serif text-2xl text-espresso">Not authorized</h1>
-          <p className="mt-2 text-sm text-muted-foreground">Your account doesn't have admin access.</p>
-          <Button onClick={() => signOut().then(() => navigate("/admin/login"))} className="mt-6">Sign out</Button>
-        </div>
-      </div>
-    );
+  if (loading || !ready) {
+    return <div className="flex min-h-screen items-center justify-center bg-cream">Loading…</div>;
   }
 
   const logout = async () => { await signOut(); navigate("/admin/login"); };
+
 
   return (
     <div className="min-h-screen bg-cream">
@@ -553,6 +543,7 @@ function SettingsTab() {
       bank_details: s.bank_details, contact_email: s.contact_email, contact_phone: s.contact_phone,
       pickup_address: s.pickup_address, instagram_url: s.instagram_url, facebook_url: s.facebook_url,
       notification_email: s.notification_email,
+      bank_transfer_enabled: s.bank_transfer_enabled,
     }).eq("id", 1);
     if (error) { toast({ title: "Save failed", description: error.message, variant: "destructive" }); return; }
     qc.invalidateQueries({ queryKey: ["admin-settings"] });
@@ -575,6 +566,13 @@ function SettingsTab() {
         <div><Label>Facebook URL</Label><Input value={s.facebook_url ?? ""} onChange={(e) => setS({ ...s, facebook_url: e.target.value })} className="mt-1" /></div>
       </div>
       <div><Label>Bank transfer details</Label><Textarea value={s.bank_details} rows={5} onChange={(e) => setS({ ...s, bank_details: e.target.value })} className="mt-1 font-mono text-xs" /></div>
+      <div className="flex items-center justify-between rounded-md border border-border bg-card p-4">
+        <div>
+          <Label className="text-base">Allow Bank Transfer at checkout</Label>
+          <p className="mt-1 text-xs text-muted-foreground">When off, customers can only choose Cash on Delivery.</p>
+        </div>
+        <Switch checked={s.bank_transfer_enabled !== false} onCheckedChange={(v) => setS({ ...s, bank_transfer_enabled: v })} />
+      </div>
       <Button onClick={save} className="bg-espresso text-cream hover:bg-espresso/90">Save settings</Button>
     </div>
   );

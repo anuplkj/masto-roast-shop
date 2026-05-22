@@ -279,6 +279,7 @@ export type Database = {
       settings: {
         Row: {
           bank_details: string
+          bank_transfer_enabled: boolean
           brand_name: string
           contact_email: string
           contact_phone: string | null
@@ -296,6 +297,7 @@ export type Database = {
         }
         Insert: {
           bank_details?: string
+          bank_transfer_enabled?: boolean
           brand_name?: string
           contact_email?: string
           contact_phone?: string | null
@@ -313,6 +315,7 @@ export type Database = {
         }
         Update: {
           bank_details?: string
+          bank_transfer_enabled?: boolean
           brand_name?: string
           contact_email?: string
           contact_phone?: string | null

@@ -31,7 +31,7 @@ const schema = z.object({
 type FormValues = z.infer<typeof schema>;
 
 export default function Checkout() {
-  const { items, subtotal, clear, productsById } = useCart();
+  const { items, subtotal, productsById } = useCart();
   const { data: settings } = useSettings();
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -40,7 +40,7 @@ export default function Checkout() {
   const [couponMsg, setCouponMsg] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const { register, handleSubmit, watch, reset, formState: { errors } } = useForm<FormValues>({
+  const { register, handleSubmit, watch, reset, setValue, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: { delivery: "delivery", payment: "cod" },
   });
@@ -81,7 +81,16 @@ export default function Checkout() {
     return (subtotal - discount) >= threshold ? 0 : flat;
   }, [delivery, subtotal, discount, threshold, flat]);
 
+
+  // If admin disabled Bank Transfer, force COD
+  useEffect(() => {
+    if (settings && settings.bank_transfer_enabled === false && payment === "bank") {
+      setValue("payment", "cod");
+    }
+  }, [settings, payment, setValue]);
+
   const total = Math.max(0, subtotal - discount + shipping);
+
 
   const applyCoupon = async () => {
     setCouponMsg(null);
@@ -163,7 +172,7 @@ export default function Checkout() {
         window.open(whatsappLink(text, settings.whatsapp_number), "_blank", "noopener");
       }
 
-      clear();
+      try { sessionStorage.setItem("masto.pendingOrderClear", orderId); } catch {}
       navigate(`/order/${orderId}?success=1`);
     } catch (e: any) {
       console.error(e);
@@ -206,9 +215,11 @@ export default function Checkout() {
             <Card title="Payment">
               <div className="grid gap-3 sm:grid-cols-2">
                 <Radio label="Cash on Delivery" sub="Pay when your order arrives" {...register("payment")} value="cod" />
-                <Radio label="Bank Transfer" sub="Manual transfer instructions" {...register("payment")} value="bank" />
+                {settings?.bank_transfer_enabled !== false && (
+                  <Radio label="Bank Transfer" sub="Manual transfer instructions" {...register("payment")} value="bank" />
+                )}
               </div>
-              {payment === "bank" && settings?.bank_details && (
+              {payment === "bank" && settings?.bank_transfer_enabled !== false && settings?.bank_details && (
                 <pre className="mt-4 whitespace-pre-wrap rounded-md bg-secondary p-4 text-xs text-secondary-foreground">{settings.bank_details}</pre>
               )}
             </Card>
