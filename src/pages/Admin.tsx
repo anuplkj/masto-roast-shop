@@ -6,37 +6,27 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useRequireAdmin } from "@/hooks/useRequireAdmin";
 import { fetchProducts, fetchSettings, fetchGallery, formatNPR, WEIGHTS, type Product, type Settings, type Weight } from "@/lib/api";
 import { uploadImage, deleteImage } from "@/lib/upload";
 import { toast } from "@/hooks/use-toast";
 
 export default function Admin() {
-  const { user, isAdmin, loading, signOut } = useAuth();
+  const { signOut } = useAuth();
   const navigate = useNavigate();
+  const { ready, loading } = useRequireAdmin();
 
-  useEffect(() => {
-    if (!loading && !user) navigate("/admin/login");
-  }, [loading, user, navigate]);
-
-  if (loading) return <div className="flex min-h-screen items-center justify-center bg-cream">Loading…</div>;
-  if (!user) return null;
-  if (!isAdmin) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-cream p-6">
-        <div className="max-w-md rounded-2xl border border-border bg-card p-8 text-center shadow-soft">
-          <h1 className="font-serif text-2xl text-espresso">Not authorized</h1>
-          <p className="mt-2 text-sm text-muted-foreground">Your account doesn't have admin access.</p>
-          <Button onClick={() => signOut().then(() => navigate("/admin/login"))} className="mt-6">Sign out</Button>
-        </div>
-      </div>
-    );
+  if (loading || !ready) {
+    return <div className="flex min-h-screen items-center justify-center bg-cream">Loading…</div>;
   }
 
   const logout = async () => { await signOut(); navigate("/admin/login"); };
+
 
   return (
     <div className="min-h-screen bg-cream">
