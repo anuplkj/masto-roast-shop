@@ -40,7 +40,7 @@ export default function Checkout() {
   const [couponMsg, setCouponMsg] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const { register, handleSubmit, watch, reset, formState: { errors } } = useForm<FormValues>({
+  const { register, handleSubmit, watch, reset, setValue, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: { delivery: "delivery", payment: "cod" },
   });
@@ -81,7 +81,16 @@ export default function Checkout() {
     return (subtotal - discount) >= threshold ? 0 : flat;
   }, [delivery, subtotal, discount, threshold, flat]);
 
+
+  // If admin disabled Bank Transfer, force COD
+  useEffect(() => {
+    if (settings && settings.bank_transfer_enabled === false && payment === "bank") {
+      setValue("payment", "cod");
+    }
+  }, [settings, payment, setValue]);
+
   const total = Math.max(0, subtotal - discount + shipping);
+
 
   const applyCoupon = async () => {
     setCouponMsg(null);
