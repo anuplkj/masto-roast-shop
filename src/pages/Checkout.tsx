@@ -31,7 +31,7 @@ const schema = z.object({
 type FormValues = z.infer<typeof schema>;
 
 export default function Checkout() {
-  const { items, subtotal, clear, productsById } = useCart();
+  const { items, subtotal, productsById } = useCart();
   const { data: settings } = useSettings();
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -163,7 +163,7 @@ export default function Checkout() {
         window.open(whatsappLink(text, settings.whatsapp_number), "_blank", "noopener");
       }
 
-      clear();
+      try { sessionStorage.setItem("masto.pendingOrderClear", orderId); } catch {}
       navigate(`/order/${orderId}?success=1`);
     } catch (e: any) {
       console.error(e);
@@ -206,9 +206,11 @@ export default function Checkout() {
             <Card title="Payment">
               <div className="grid gap-3 sm:grid-cols-2">
                 <Radio label="Cash on Delivery" sub="Pay when your order arrives" {...register("payment")} value="cod" />
-                <Radio label="Bank Transfer" sub="Manual transfer instructions" {...register("payment")} value="bank" />
+                {settings?.bank_transfer_enabled !== false && (
+                  <Radio label="Bank Transfer" sub="Manual transfer instructions" {...register("payment")} value="bank" />
+                )}
               </div>
-              {payment === "bank" && settings?.bank_details && (
+              {payment === "bank" && settings?.bank_transfer_enabled !== false && settings?.bank_details && (
                 <pre className="mt-4 whitespace-pre-wrap rounded-md bg-secondary p-4 text-xs text-secondary-foreground">{settings.bank_details}</pre>
               )}
             </Card>
