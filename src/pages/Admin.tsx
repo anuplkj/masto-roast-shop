@@ -543,6 +543,7 @@ function SettingsTab() {
       bank_details: s.bank_details, contact_email: s.contact_email, contact_phone: s.contact_phone,
       pickup_address: s.pickup_address, instagram_url: s.instagram_url, facebook_url: s.facebook_url,
       notification_email: s.notification_email,
+      bank_transfer_enabled: s.bank_transfer_enabled,
     }).eq("id", 1);
     if (error) { toast({ title: "Save failed", description: error.message, variant: "destructive" }); return; }
     qc.invalidateQueries({ queryKey: ["admin-settings"] });
@@ -565,6 +566,13 @@ function SettingsTab() {
         <div><Label>Facebook URL</Label><Input value={s.facebook_url ?? ""} onChange={(e) => setS({ ...s, facebook_url: e.target.value })} className="mt-1" /></div>
       </div>
       <div><Label>Bank transfer details</Label><Textarea value={s.bank_details} rows={5} onChange={(e) => setS({ ...s, bank_details: e.target.value })} className="mt-1 font-mono text-xs" /></div>
+      <div className="flex items-center justify-between rounded-md border border-border bg-card p-4">
+        <div>
+          <Label className="text-base">Allow Bank Transfer at checkout</Label>
+          <p className="mt-1 text-xs text-muted-foreground">When off, customers can only choose Cash on Delivery.</p>
+        </div>
+        <Switch checked={s.bank_transfer_enabled !== false} onCheckedChange={(v) => setS({ ...s, bank_transfer_enabled: v })} />
+      </div>
       <Button onClick={save} className="bg-espresso text-cream hover:bg-espresso/90">Save settings</Button>
     </div>
   );
